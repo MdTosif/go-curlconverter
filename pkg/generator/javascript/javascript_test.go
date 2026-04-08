@@ -79,8 +79,8 @@ func TestGenerateMatchesSelectedCurlconverterFixtures(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			cmdPath := filepath.Join("..", "..", "..", "..", "test", "fixtures", "curl_commands", tc.commandFile)
-			expectedPath := filepath.Join("..", "..", "..", "..", "test", "fixtures", "javascript", tc.expectedFile)
+			cmdPath := filepath.Join("..", "..", "..", "test", "fixtures", "curl_commands", tc.commandFile)
+			expectedPath := filepath.Join("..", "..", "..", "test", "fixtures", "javascript", tc.expectedFile)
 
 			cmd, err := os.ReadFile(cmdPath)
 			if err != nil {

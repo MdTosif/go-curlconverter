@@ -4,6 +4,7 @@ import (
 	gogen "github.com/mdtosif/go-curlconverter/pkg/generator/golang"
 	jsgen "github.com/mdtosif/go-curlconverter/pkg/generator/javascript"
 	axgen "github.com/mdtosif/go-curlconverter/pkg/generator/nodeaxios"
+	pygen "github.com/mdtosif/go-curlconverter/pkg/generator/python"
 	"github.com/mdtosif/go-curlconverter/pkg/parser"
 	"github.com/mdtosif/go-curlconverter/pkg/request"
 )
@@ -65,6 +66,25 @@ func ToGo(curlCommand string) (string, error) {
 
 func ToGoWarn(curlCommand string) (string, Warnings, error) {
 	code, err := ToGo(curlCommand)
+	if err != nil {
+		return "", nil, err
+	}
+	return code, nil, nil
+}
+
+func ToPython(curlCommand string) (string, error) {
+	if code, err := pygen.GenerateCommand(curlCommand); err == nil {
+		return code, nil
+	}
+	reqs, err := parser.ParseAll(curlCommand)
+	if err != nil {
+		return "", err
+	}
+	return pygen.Generate(reqs[0]), nil
+}
+
+func ToPythonWarn(curlCommand string) (string, Warnings, error) {
+	code, err := ToPython(curlCommand)
 	if err != nil {
 		return "", nil, err
 	}

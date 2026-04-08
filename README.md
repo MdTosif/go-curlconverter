@@ -1,14 +1,14 @@
 # Go curlconverter
 
-This directory contains a Go implementation of a `curl` to JavaScript `fetch()` converter.
+This directory contains a Go implementation of curl request conversion with Go-native parser and generator packages.
 
-It is a focused Go port inspired by the upstream `curlconverter` JavaScript project in the repository root. The Go code targets a well-defined conversion surface for JavaScript `fetch()` output, with unit tests and fixture-backed parity checks for the supported subset.
+It is a focused Go port inspired by the upstream `curlconverter` JavaScript project in the repository root. The Go code targets a growing subset of upstream outputs, with unit tests and fixture-backed parity checks for the supported generators.
 
 ## What it does
 
 - parses a limited subset of `curl`
 - builds a request model in Go
-- generates JavaScript `fetch()` code
+- generates JavaScript `fetch()`, Node Axios, Go, and Python code
 - includes unit tests and fixture-backed parity tests against the checked-in upstream project fixtures
 
 ## Supported flags
@@ -65,13 +65,19 @@ Current behavior includes:
 ## Project structure
 
 - `cmd/curlconv`
-  Small CLI for converting a curl command to JavaScript.
+  Small CLI for converting a curl command to supported output targets.
 - `pkg/parser`
   Curl parser for the supported subset.
 - `pkg/request`
   Request model used between parsing and code generation.
 - `pkg/generator/javascript`
   JavaScript `fetch()` generator and tests.
+- `pkg/generator/nodeaxios`
+  Node Axios generator and tests.
+- `pkg/generator/golang`
+  Go generator and tests.
+- `pkg/generator/python`
+  Python Requests generator and tests.
 - `CONTEXT.md`
   Short project note about what was verified and what remains out of scope.
 
@@ -87,6 +93,20 @@ If your environment blocks the default Go build cache location, use:
 ```sh
 cd go
 GOCACHE=/tmp/go-build-cache go build ./...
+```
+
+## Install
+
+Install the CLI with:
+
+```sh
+go install github.com/mdtosif/go-curlconverter/cmd/curlconv@latest
+```
+
+If your environment blocks the default Go build cache location, use:
+
+```sh
+GOCACHE=/tmp/go-build-cache go install github.com/mdtosif/go-curlconverter/cmd/curlconv@latest
 ```
 
 ## Run
@@ -146,14 +166,14 @@ fetch('https://example.com/api', {
 
 ## Scope
 
-The Go implementation is intentionally focused on one output target: JavaScript `fetch()`.
+The Go implementation is intentionally focused on a subset of the upstream output matrix.
 
 It does not aim to be a full cross-language port of the upstream project, but within that scope it now supports:
 
 - common curl request parsing for headers, cookies, auth, JSON, forms, uploads, and query-string generation
-- real file-backed request bodies and multipart file reads in generated JavaScript
+- real file-backed request bodies and multipart file reads in generated code
 - bearer, basic, and digest authentication handling
-- stable, tested JavaScript output for the supported fixture set
+- stable, tested output for JavaScript `fetch()`, Node Axios, Go, and Python on the supported fixture set
 
 ## Module path
 

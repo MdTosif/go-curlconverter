@@ -9,7 +9,7 @@ import (
 func TestParseMatchesCheckedInParserFixtures(t *testing.T) {
 	t.Parallel()
 
-	fixturesDir := filepath.Join("..", "..", "..", "test", "fixtures")
+	fixturesDir := filepath.Join("..", "..", "test", "fixtures")
 	parserDir := filepath.Join(fixturesDir, "parser")
 	commandDir := filepath.Join(fixturesDir, "curl_commands")
 
