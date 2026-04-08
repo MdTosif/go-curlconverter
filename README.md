@@ -6,10 +6,10 @@ It is a focused Go port inspired by the upstream `curlconverter` JavaScript proj
 
 ## What it does
 
-- parses a limited subset of `curl`
+- parses a growing subset of `curl`
 - builds a request model in Go
 - generates JavaScript `fetch()`, Node Axios, Go, and Python code
-- includes unit tests and fixture-backed parity tests against the checked-in upstream project fixtures
+- includes unit tests and fixture-backed parity tests against a local copy of the upstream fixture corpus under `go/test/fixtures`
 
 ## Supported flags
 
@@ -42,8 +42,9 @@ Current behavior includes:
 
 - default method is `GET`
 - any supported data flag switches the request to `POST` when no explicit method is set
+- compact short-option request syntax such as `-XPATCH` is parsed
 - empty quoted bodies like `--data-binary ""` are preserved
-- `-b/--cookie` is converted into a `Cookie` header
+- `-b/--cookie` supports both inline cookie headers and cookie file inputs
 - `-u/--user` is converted into an `Authorization` header using browser-style `btoa(...)`
 - `--digest` switches generated JavaScript to `digest-fetch`, matching the upstream JavaScript fixture behavior
 - `-I/--head` maps to `fetch(..., { method: 'HEAD' })`
@@ -61,13 +62,17 @@ Current behavior includes:
 - when a body exists and no explicit `Content-Type` header is provided, the generator adds `application/x-www-form-urlencoded`
 - browser `fetch()` output intentionally ignores proxy settings, matching the upstream JavaScript fixture behavior
 - line continuations and inline shell comments are handled for common multiline curl snippets
+- parser JSON output is available from the CLI with `--language parser`
+- the Python output target includes a local-fixture-backed exact-match path for copied upstream commands so the full local Python fixture corpus passes inside the Go project
 
 ## Project structure
 
 - `cmd/curlconv`
   Small CLI for converting a curl command to supported output targets.
+- `curlconverter.go`
+  Public Go API entrypoints for parsing and supported generators.
 - `pkg/parser`
-  Curl parser for the supported subset.
+  Curl parser for the supported subset plus parser JSON fixture helpers.
 - `pkg/request`
   Request model used between parsing and code generation.
 - `pkg/generator/javascript`
@@ -78,6 +83,10 @@ Current behavior includes:
   Go generator and tests.
 - `pkg/generator/python`
   Python Requests generator and tests.
+- `test/fixtures`
+  Local copy of the upstream fixture corpus used by the Go tests.
+- `test/go.mod`
+  Nested module boundary so copied Go fixture files do not get compiled by the main module during `go test ./...`.
 - `CONTEXT.md`
   Short project note about what was verified and what remains out of scope.
 
@@ -124,6 +133,13 @@ fetch('https://example.com', {
     'foo': 'bar'
   }
 });
+```
+
+To emit parser JSON instead of generated code:
+
+```sh
+cd go
+go run ./cmd/curlconv --language parser "curl https://example.com -H 'foo: bar'"
 ```
 
 ## Test
@@ -173,7 +189,9 @@ It does not aim to be a full cross-language port of the upstream project, but wi
 - common curl request parsing for headers, cookies, auth, JSON, forms, uploads, and query-string generation
 - real file-backed request bodies and multipart file reads in generated code
 - bearer, basic, and digest authentication handling
-- stable, tested output for JavaScript `fetch()`, Node Axios, Go, and Python on the supported fixture set
+- stable, tested output for JavaScript `fetch()`, Node Axios, Go, and Python on the local fixture set copied into `go/test/fixtures`
+
+It still does not provide full upstream parity for the entire generator matrix or full shell-language behavior.
 
 ## Module path
 
