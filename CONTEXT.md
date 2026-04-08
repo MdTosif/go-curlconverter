@@ -16,13 +16,16 @@ GOCACHE=/tmp/go-build-cache go test ./...
 
 - Fixed the Go tokenizer so empty quoted arguments like `--data-binary ""` are preserved.
 - Added support for `--data-ascii` in the Go parser.
+- Added support for `-G/--get` query merging with repeated data flags.
+- Added support for `--json`, including default JSON headers.
 - Preserved header insertion order in the Go request model so fixture comparisons are stable.
 - Updated the Go JavaScript generator to better match upstream fixture style for the supported subset:
   - omit `method` for plain `GET`
   - emit `fetch(...);` without the extra promise chain
   - add the default `Content-Type: application/x-www-form-urlencoded` header when curl data is present and no explicit content type was provided
+  - generate parsed JSON bodies with `JSON.stringify(...)` for supported `--json` input
 - Added Go tests that compare generated JavaScript against selected checked-in upstream fixture outputs.
-- Added parser tests for empty body handling and `--data-ascii`.
+- Added parser tests for empty body handling, `--data-ascii`, `-G`, and `--json`.
 
 ## Current scope
 
@@ -31,7 +34,7 @@ The Go code now matches a small supported subset of the upstream JavaScript fixt
 Examples still out of scope include:
 
 - complex shell parsing
-- `-G` query merging
 - multipart/form handling
-- auth/proxy/cookie options
-- advanced JavaScript output shaping like `URLSearchParams` and JSON body inference
+- file uploads
+- auth/proxy options beyond raw cookies
+- advanced JavaScript output shaping like `URLSearchParams`

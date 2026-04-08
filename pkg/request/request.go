@@ -18,5 +18,6 @@ type Request struct {
 	Headers  map[string]string
 	HeaderKV []Header
 	HasBody  bool
+	JSONBody bool
 	Body     string
 }
