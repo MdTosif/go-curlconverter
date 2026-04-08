@@ -93,6 +93,17 @@ Examples still out of scope include:
 - warning-code and underline parity with the upstream JS implementation
 - full multi-command / redirect / stdin / query-file / cookie-jar / session semantics across every generator
 
+## Parser direction update
+
+- Decision: move raw shell parsing in Go to `mvdan.cc/sh/v3/syntax` instead of continuing to grow the custom tokenizer/splitter.
+- Reason:
+  - much stronger shell grammar handling and error recovery than ad-hoc token scanning
+  - closer long-term maintainability as shell coverage grows
+  - measured binary-size impact is acceptable for this project (about `+0.28 MB` in a local probe)
+- Scope note:
+  - this change applies to raw command-string parsing (for example `Parse`, `ParseWarn`, `ParseAllWarn`)
+  - argv-slice entrypoints (for example `ParseArgs`, `ParseAllArgs`) stay as-is and do not need shell parsing
+
 ## Future Notes
 
 - The Go project is a nested git repository with its own branch history and local git identity.
@@ -113,11 +124,16 @@ Examples still out of scope include:
   - in progress: add limited support for multiple chained `curl` commands
   - in progress: add upstream-style `string | string[]` parser entrypoints
   - in progress: port the first warning codes through the Go `Warn` APIs
-  - in progress: port source-underline formatting and parser-originated warnings for the current tokenizer
-  - in progress: port richer shell/tokenizer warning coverage from upstream `src/shell/tokenizer.ts`
-  - next: add more shell-structure warnings such as unsupported syntax nodes, redirect combinations, and command-shape diagnostics
-  - next: port more shell syntax from upstream `src/shell/`
+  - next: integrate `mvdan.cc/sh/v3/syntax` as the raw shell parser backend
+  - next: map mvdan AST nodes to the current token/command extraction flow for `curl` commands
+  - next: port shell warnings to be AST-driven (expansions, substitutions, pipelines, redirects, background, malformed shell constructs)
+  - next: keep source-underlined warning formatting while switching warning origins to the new parser backend
   - next: close remaining curl option-table and precedence gaps
+  - cleanup after mvdan integration (remove unnecessary custom shell parsing code):
+    - remove or greatly simplify `tokenizeWithWarnings` raw-shell scanning branches now replaced by AST parsing
+    - remove duplicate shell command splitting helpers only used by the old scanner (for example shell-boundary splitting and redirect-token stripping that become redundant)
+    - remove old shell warning scanners that duplicate mvdan-backed detection
+    - keep only minimal normalization helpers still required by curl-option parsing
 - Milestone 2: shared request/normalization parity
   - port more of upstream `Request.ts`, `Headers.ts`, `Query.ts`, and `src/curl/*`
   - remove lossy or generator-specific shortcuts in the parser model
