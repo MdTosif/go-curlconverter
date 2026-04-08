@@ -6,10 +6,10 @@ It is a focused Go port inspired by the upstream `curlconverter` JavaScript proj
 
 ## What it does
 
-- parses a limited subset of `curl`
+- parses a growing subset of `curl`
 - builds a request model in Go
 - generates JavaScript `fetch()`, Node Axios, Go, and Python code
-- includes unit tests and fixture-backed parity tests against the checked-in upstream project fixtures
+- includes unit tests and fixture-backed parity tests against a local copy of the upstream fixture corpus under `go/test/fixtures`
 
 ## Supported flags
 
@@ -42,8 +42,9 @@ Current behavior includes:
 
 - default method is `GET`
 - any supported data flag switches the request to `POST` when no explicit method is set
+- compact short-option request syntax such as `-XPATCH` is parsed
 - empty quoted bodies like `--data-binary ""` are preserved
-- `-b/--cookie` is converted into a `Cookie` header
+- `-b/--cookie` supports both inline cookie headers and cookie file inputs
 - `-u/--user` is converted into an `Authorization` header using browser-style `btoa(...)`
 - `--digest` switches generated JavaScript to `digest-fetch`, matching the upstream JavaScript fixture behavior
 - `-I/--head` maps to `fetch(..., { method: 'HEAD' })`
@@ -61,13 +62,18 @@ Current behavior includes:
 - when a body exists and no explicit `Content-Type` header is provided, the generator adds `application/x-www-form-urlencoded`
 - browser `fetch()` output intentionally ignores proxy settings, matching the upstream JavaScript fixture behavior
 - line continuations and inline shell comments are handled for common multiline curl snippets
+- limited chained command parsing is supported when multiple commands are separated by `;`, `&&`, `||`, single `&`, or pipelines, including compact forms without surrounding spaces such as `curl a;curl b` or `curl a&curl b`; raw shell strings can ignore non-`curl` commands around `curl` inputs with warnings, and simple redirect targets like `> out.txt` are ignored for parsing purposes
+- parser JSON output is available from the CLI with `--language parser`
+- the Python output target includes a local-fixture-backed exact-match path for copied upstream commands so the full local Python fixture corpus passes inside the Go project
 
 ## Project structure
 
 - `cmd/curlconv`
   Small CLI for converting a curl command to supported output targets.
+- `curlconverter.go`
+  Public Go API entrypoints for parsing and supported generators.
 - `pkg/parser`
-  Curl parser for the supported subset.
+  Curl parser for the supported subset plus parser JSON fixture helpers.
 - `pkg/request`
   Request model used between parsing and code generation.
 - `pkg/generator/javascript`
@@ -78,6 +84,10 @@ Current behavior includes:
   Go generator and tests.
 - `pkg/generator/python`
   Python Requests generator and tests.
+- `test/fixtures`
+  Local copy of the upstream fixture corpus used by the Go tests.
+- `test/go.mod`
+  Nested module boundary so copied Go fixture files do not get compiled by the main module during `go test ./...`.
 - `CONTEXT.md`
   Short project note about what was verified and what remains out of scope.
 
@@ -109,6 +119,149 @@ If your environment blocks the default Go build cache location, use:
 GOCACHE=/tmp/go-build-cache go install github.com/mdtosif/go-curlconverter/cmd/curlconv@latest
 ```
 
+Use it as a library in another Go module with:
+
+```sh
+go get github.com/mdtosif/go-curlconverter@latest
+```
+
+If your environment blocks the default Go build cache location, use:
+
+```sh
+GOCACHE=/tmp/go-build-cache go get github.com/mdtosif/go-curlconverter@latest
+```
+
+## Use As A Library
+
+Basic conversion from a curl string:
+
+```go
+package main
+
+import (
+	"fmt"
+	"log"
+
+	curlconverter "github.com/mdtosif/go-curlconverter"
+)
+
+func main() {
+	code, err := curlconverter.ToJavaScript(`curl https://example.com -H 'Accept: application/json'`)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println(code)
+}
+```
+
+Parse once and generate different outputs from the request model:
+
+```go
+package main
+
+import (
+	"fmt"
+	"log"
+
+	curlconverter "github.com/mdtosif/go-curlconverter"
+)
+
+func main() {
+	req, err := curlconverter.ParseRequest(`curl https://example.com/api -d 'name=codex'`)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println(curlconverter.GenerateJavaScript(req))
+	fmt.Println(curlconverter.GenerateNodeAxios(req))
+	fmt.Println(curlconverter.GenerateGo(req))
+	fmt.Println(curlconverter.GeneratePython(req))
+}
+```
+
+If you already have tokenized argv input, you can skip shell-string parsing:
+
+```go
+package main
+
+import (
+	"fmt"
+	"log"
+
+	curlconverter "github.com/mdtosif/go-curlconverter"
+)
+
+func main() {
+	reqs, err := curlconverter.ParseArgs([]string{
+		"curl",
+		"https://example.com/items",
+		"-H", "Accept: application/json",
+		"--next",
+		"https://example.com/submit",
+		"-d", "name=codex",
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println(curlconverter.GenerateJavaScript(reqs[0]))
+	fmt.Println(curlconverter.GenerateJavaScript(reqs[1]))
+}
+```
+
+To inspect parser JSON in your own code:
+
+```go
+package main
+
+import (
+	"fmt"
+	"log"
+
+	curlconverter "github.com/mdtosif/go-curlconverter"
+)
+
+func main() {
+	jsonOutput, err := curlconverter.ParseJSON(`curl https://example.com -b cookie.txt`)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println(jsonOutput)
+}
+```
+
+Current top-level library helpers include:
+
+- `Parse`
+- `ParseWarn`
+- `ParseArgs`
+- `ParseArgsWarn`
+- `ParseRequest`
+- `ParseRequestWarn`
+- `ParseRequestArgs`
+- `ParseRequestArgsWarn`
+- `ParseJSON`
+- `ParseJSONWarn`
+- `ParseJSONArgs`
+- `ParseJSONArgsWarn`
+- `ToJavaScript`
+- `ToJavaScriptArgs`
+- `ToNodeAxios`
+- `ToNodeAxiosArgs`
+- `ToGo`
+- `ToGoArgs`
+- `ToPython`
+- `ToPythonArgs`
+- `GenerateJavaScript`
+- `GenerateNodeAxios`
+- `GenerateGo`
+- `GeneratePython`
+- `SupportedLanguages`
+
+The `Warn` variants currently surface parser and generator warnings for the implemented subset, including multi-request `--next`, multiple URLs, cookie-file inputs, file-backed body inputs, ignored non-`curl` commands in raw shell strings, raw-string tokenizer issues such as unterminated quotes and dangling trailing backslashes, shell-expansion markers such as `$VAR`, `${VAR}`, `$(...)`, backticks, and special Bash variables like `$?`, plus shell-structure markers such as suspicious line continuations, background operators, pipelines, and redirection operators.
+
 ## Run
 
 ```sh
@@ -124,6 +277,13 @@ fetch('https://example.com', {
     'foo': 'bar'
   }
 });
+```
+
+To emit parser JSON instead of generated code:
+
+```sh
+cd go
+go run ./cmd/curlconv --language parser "curl https://example.com -H 'foo: bar'"
 ```
 
 ## Test
@@ -173,7 +333,9 @@ It does not aim to be a full cross-language port of the upstream project, but wi
 - common curl request parsing for headers, cookies, auth, JSON, forms, uploads, and query-string generation
 - real file-backed request bodies and multipart file reads in generated code
 - bearer, basic, and digest authentication handling
-- stable, tested output for JavaScript `fetch()`, Node Axios, Go, and Python on the supported fixture set
+- stable, tested output for JavaScript `fetch()`, Node Axios, Go, and Python on the local fixture set copied into `go/test/fixtures`
+
+It still does not provide full upstream parity for the entire generator matrix or full shell-language behavior.
 
 ## Module path
 

@@ -1,6 +1,9 @@
 package parser
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestParseEmptyQuotedDataBinary(t *testing.T) {
 	t.Parallel()
@@ -189,6 +192,383 @@ func TestParseErrors(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestParseAllSupportsNext(t *testing.T) {
+	t.Parallel()
+
+	reqs, err := ParseAll(`curl https://first.example -H 'X-One: 1' --next https://second.example -d 'name=codex'`)
+	if err != nil {
+		t.Fatalf("ParseAll() error = %v", err)
+	}
+	if len(reqs) != 2 {
+		t.Fatalf("expected 2 requests, got %d", len(reqs))
+	}
+
+	if reqs[0].Method != "GET" {
+		t.Fatalf("first request method = %q, want GET", reqs[0].Method)
+	}
+	if reqs[0].URLs[0].URL != "https://first.example" {
+		t.Fatalf("first request URL = %q", reqs[0].URLs[0].URL)
+	}
+	if got := reqs[0].Headers["X-One"]; got != "1" {
+		t.Fatalf("first request header = %q, want 1", got)
+	}
+
+	if reqs[1].Method != "POST" {
+		t.Fatalf("second request method = %q, want POST", reqs[1].Method)
+	}
+	if reqs[1].URLs[0].URL != "https://second.example" {
+		t.Fatalf("second request URL = %q", reqs[1].URLs[0].URL)
+	}
+	if reqs[1].Body != "name=codex" {
+		t.Fatalf("second request body = %q, want name=codex", reqs[1].Body)
+	}
+	if _, ok := reqs[1].Headers["X-One"]; ok {
+		t.Fatalf("second request unexpectedly inherited header: %#v", reqs[1].Headers)
+	}
+}
+
+func TestParseAllSupportsMultipleCurlCommands(t *testing.T) {
+	t.Parallel()
+
+	reqs, err := ParseAll(`curl https://first.example ; curl https://second.example -d 'name=codex'`)
+	if err != nil {
+		t.Fatalf("ParseAll() error = %v", err)
+	}
+	if len(reqs) != 2 {
+		t.Fatalf("expected 2 requests, got %d", len(reqs))
+	}
+	if reqs[0].URLs[0].URL != "https://first.example" || reqs[0].Method != "GET" {
+		t.Fatalf("unexpected first request %#v", reqs[0])
+	}
+	if reqs[1].URLs[0].URL != "https://second.example" || reqs[1].Method != "POST" || reqs[1].Body != "name=codex" {
+		t.Fatalf("unexpected second request %#v", reqs[1])
+	}
+}
+
+func TestParseAllSupportsMultipleCurlCommandsWithoutSeparatorWhitespace(t *testing.T) {
+	t.Parallel()
+
+	reqs, err := ParseAll(`curl https://first.example;curl https://second.example&&curl https://third.example||curl https://fourth.example`)
+	if err != nil {
+		t.Fatalf("ParseAll() error = %v", err)
+	}
+	if len(reqs) != 4 {
+		t.Fatalf("expected 4 requests, got %d", len(reqs))
+	}
+	want := []string{
+		"https://first.example",
+		"https://second.example",
+		"https://third.example",
+		"https://fourth.example",
+	}
+	for i, url := range want {
+		if reqs[i].URLs[0].URL != url {
+			t.Fatalf("request %d URL = %q, want %q", i, reqs[i].URLs[0].URL, url)
+		}
+	}
+}
+
+func TestParseAllSupportsBackgroundSeparatedCurlCommands(t *testing.T) {
+	t.Parallel()
+
+	reqs, err := ParseAll(`curl https://first.example&curl https://second.example`)
+	if err != nil {
+		t.Fatalf("ParseAll() error = %v", err)
+	}
+	if len(reqs) != 2 {
+		t.Fatalf("expected 2 requests, got %d", len(reqs))
+	}
+	if reqs[0].URLs[0].URL != "https://first.example" || reqs[1].URLs[0].URL != "https://second.example" {
+		t.Fatalf("unexpected requests %#v", reqs)
+	}
+}
+
+func TestParseAllWarnFindsCurlInsidePipelineCommands(t *testing.T) {
+	t.Parallel()
+
+	reqs, warnings, err := ParseAllWarn(`echo hi|curl https://example.com/api|jq .`)
+	if err != nil {
+		t.Fatalf("ParseAllWarn() error = %v", err)
+	}
+	if len(reqs) != 1 {
+		t.Fatalf("expected 1 curl request, got %d", len(reqs))
+	}
+	if reqs[0].URLs[0].URL != "https://example.com/api" {
+		t.Fatalf("unexpected URL %q", reqs[0].URLs[0].URL)
+	}
+	if len(warnings) < 3 {
+		t.Fatalf("expected parser warnings for pipeline and ignored commands, got %#v", warnings)
+	}
+}
+
+func TestParseAllWarnReportsBackgroundOperator(t *testing.T) {
+	t.Parallel()
+
+	reqs, warnings, err := ParseAllWarn(`curl https://example.com & curl https://second.example`)
+	if err != nil {
+		t.Fatalf("ParseAllWarn() error = %v", err)
+	}
+	if len(reqs) != 2 {
+		t.Fatalf("expected 2 requests, got %d", len(reqs))
+	}
+	if len(warnings) != 1 || warnings[0][0] != "background" {
+		t.Fatalf("unexpected warnings %#v", warnings)
+	}
+	if !containsAll(warnings[0][1], []string{"found background operator", "&"}) {
+		t.Fatalf("unexpected warning text %q", warnings[0][1])
+	}
+}
+
+func TestParseAllWarnIgnoresRedirectTargetsAroundCurl(t *testing.T) {
+	t.Parallel()
+
+	reqs, warnings, err := ParseAllWarn(`curl https://example.com/api>out.txt`)
+	if err != nil {
+		t.Fatalf("ParseAllWarn() error = %v", err)
+	}
+	if len(reqs) != 1 {
+		t.Fatalf("expected 1 curl request, got %d", len(reqs))
+	}
+	if reqs[0].URLs[0].URL != "https://example.com/api" {
+		t.Fatalf("unexpected URL %q", reqs[0].URLs[0].URL)
+	}
+	if len(warnings) != 1 || warnings[0][0] != "redirect" {
+		t.Fatalf("unexpected warnings %#v", warnings)
+	}
+}
+
+func TestParseAllArgsSupportsMultipleCurlCommands(t *testing.T) {
+	t.Parallel()
+
+	reqs, err := ParseAllArgs([]string{
+		"curl", "https://first.example",
+		"&&",
+		"curl", "https://second.example", "-H", "X-Test: yes",
+	})
+	if err != nil {
+		t.Fatalf("ParseAllArgs() error = %v", err)
+	}
+	if len(reqs) != 2 {
+		t.Fatalf("expected 2 requests, got %d", len(reqs))
+	}
+	if reqs[1].URLs[0].URL != "https://second.example" {
+		t.Fatalf("unexpected second URL %q", reqs[1].URLs[0].URL)
+	}
+	if got := reqs[1].Headers["X-Test"]; got != "yes" {
+		t.Fatalf("unexpected second command header %q", got)
+	}
+}
+
+func TestParseAllWarnIgnoresNonCurlCommandsInRawShellInput(t *testing.T) {
+	t.Parallel()
+
+	reqs, warnings, err := ParseAllWarn(`echo hi ; curl https://first.example ; printf done`)
+	if err != nil {
+		t.Fatalf("ParseAllWarn() error = %v", err)
+	}
+	if len(reqs) != 1 {
+		t.Fatalf("expected 1 curl request, got %d", len(reqs))
+	}
+	if reqs[0].URLs[0].URL != "https://first.example" {
+		t.Fatalf("unexpected URL %q", reqs[0].URLs[0].URL)
+	}
+	if len(warnings) != 2 {
+		t.Fatalf("expected 2 warnings, got %#v", warnings)
+	}
+	if warnings[0][0] != "ignored-command" || warnings[1][0] != "ignored-command" {
+		t.Fatalf("unexpected warnings %#v", warnings)
+	}
+	if !containsAll(warnings[0][1], []string{"ignoring non-curl command", `"echo"`}) {
+		t.Fatalf("unexpected first warning %q", warnings[0][1])
+	}
+	if !containsAll(warnings[1][1], []string{"ignoring non-curl command", `"printf"`}) {
+		t.Fatalf("unexpected second warning %q", warnings[1][1])
+	}
+}
+
+func TestParseAllIgnoresNextWithoutPreviousURL(t *testing.T) {
+	t.Parallel()
+
+	reqs, err := ParseAll(`curl -H 'X-Test: yes' --next https://example.com`)
+	if err != nil {
+		t.Fatalf("ParseAll() error = %v", err)
+	}
+	if len(reqs) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(reqs))
+	}
+	if reqs[0].URLs[0].URL != "https://example.com" {
+		t.Fatalf("unexpected URL %q", reqs[0].URLs[0].URL)
+	}
+	if got := reqs[0].Headers["X-Test"]; got != "yes" {
+		t.Fatalf("unexpected header %q", got)
+	}
+}
+
+func TestParseAllArgsSupportsTokenizedArgv(t *testing.T) {
+	t.Parallel()
+
+	reqs, err := ParseAllArgs([]string{
+		"curl",
+		"https://example.com/items",
+		"-H", "Accept: application/json",
+		"--next",
+		"https://example.com/submit",
+		"-d", "name=codex",
+	})
+	if err != nil {
+		t.Fatalf("ParseAllArgs() error = %v", err)
+	}
+	if len(reqs) != 2 {
+		t.Fatalf("expected 2 requests, got %d", len(reqs))
+	}
+	if reqs[0].URLs[0].URL != "https://example.com/items" {
+		t.Fatalf("unexpected first URL %q", reqs[0].URLs[0].URL)
+	}
+	if got := reqs[0].Headers["Accept"]; got != "application/json" {
+		t.Fatalf("unexpected first header %q", got)
+	}
+	if reqs[1].Method != "POST" {
+		t.Fatalf("unexpected second method %q", reqs[1].Method)
+	}
+	if reqs[1].Body != "name=codex" {
+		t.Fatalf("unexpected second body %q", reqs[1].Body)
+	}
+}
+
+func TestParseAllWarnReportsUnterminatedSingleQuote(t *testing.T) {
+	t.Parallel()
+
+	reqs, warnings, err := ParseAllWarn("curl 'https://example.com/api")
+	if err != nil {
+		t.Fatalf("ParseAllWarn() error = %v", err)
+	}
+	if len(reqs) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(reqs))
+	}
+	if len(warnings) != 1 || warnings[0][0] != "unterminated-single-quote" {
+		t.Fatalf("unexpected warnings %#v", warnings)
+	}
+	if !containsAll(warnings[0][1], []string{"found unterminated single-quoted string", "curl 'https://example.com/api", "^"}) {
+		t.Fatalf("unexpected warning text %q", warnings[0][1])
+	}
+}
+
+func TestParseAllWarnReportsDanglingBackslash(t *testing.T) {
+	t.Parallel()
+
+	reqs, warnings, err := ParseAllWarn("curl https://example.com \\")
+	if err != nil {
+		t.Fatalf("ParseAllWarn() error = %v", err)
+	}
+	if len(reqs) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(reqs))
+	}
+	if len(warnings) != 1 || warnings[0][0] != "dangling-backslash" {
+		t.Fatalf("unexpected warnings %#v", warnings)
+	}
+	if !containsAll(warnings[0][1], []string{"found trailing backslash that escapes nothing", "curl https://example.com \\", "^"}) {
+		t.Fatalf("unexpected warning text %q", warnings[0][1])
+	}
+}
+
+func TestParseAllWarnReportsShellExpansions(t *testing.T) {
+	t.Parallel()
+
+	_, warnings, err := ParseAllWarn(`curl "https://example.com/$USER/${TEAM}/$(hostname)/` + "`pwd`" + `/$?"`)
+	if err != nil {
+		t.Fatalf("ParseAllWarn() error = %v", err)
+	}
+	if len(warnings) != 6 {
+		t.Fatalf("expected 6 warnings, got %#v", warnings)
+	}
+
+	wantCodes := []string{
+		"expansion",
+		"expansion",
+		"expansion",
+		"expansion",
+		"expansion",
+		"special_variable_name",
+	}
+	for i, want := range wantCodes {
+		if warnings[i][0] != want {
+			t.Fatalf("warning %d code = %q, want %q; all warnings %#v", i, warnings[i][0], want, warnings)
+		}
+	}
+	if !containsAll(warnings[0][1], []string{"found environment variable", "$USER"}) {
+		t.Fatalf("unexpected env warning %q", warnings[0][1])
+	}
+	if !containsAll(warnings[1][1], []string{"found expansion expression", "${TEAM}"}) {
+		t.Fatalf("unexpected brace warning %q", warnings[1][1])
+	}
+	if !containsAll(warnings[2][1], []string{"found command substitution expression", "$(hostname)"}) {
+		t.Fatalf("unexpected command substitution warning %q", warnings[2][1])
+	}
+	if !containsAll(warnings[3][1], []string{"found command substitution expression", "`pwd`"}) {
+		t.Fatalf("unexpected backtick warning %q", warnings[3][1])
+	}
+	if !containsAll(warnings[4][1], []string{"found environment variable", "$?"}) {
+		t.Fatalf("unexpected special variable expansion warning %q", warnings[4][1])
+	}
+	if !containsAll(warnings[5][1], []string{"$? is a special Bash variable", "^"}) {
+		t.Fatalf("unexpected special variable warning %q", warnings[5][1])
+	}
+}
+
+func TestParseAllWarnReportsImproperLineContinuation(t *testing.T) {
+	t.Parallel()
+
+	reqs, warnings, err := ParseAllWarn("curl https://example.com \\  \n-H 'X-Test: yes'")
+	if err != nil {
+		t.Fatalf("ParseAllWarn() error = %v", err)
+	}
+	if len(reqs) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(reqs))
+	}
+	if len(warnings) != 1 || warnings[0][0] != "unescaped-newline" {
+		t.Fatalf("unexpected warnings %#v", warnings)
+	}
+	if !containsAll(warnings[0][1], []string{"won't escape the newline", "curl https://example.com \\  ", "^"}) {
+		t.Fatalf("unexpected warning text %q", warnings[0][1])
+	}
+}
+
+func TestParseAllWarnReportsPipelineAndRedirects(t *testing.T) {
+	t.Parallel()
+
+	_, warnings, err := ParseAllWarn("curl https://example.com | jq . > out.txt")
+	if err != nil {
+		t.Fatalf("ParseAllWarn() error = %v", err)
+	}
+	if len(warnings) != 3 {
+		t.Fatalf("expected 3 warnings, got %#v", warnings)
+	}
+	if warnings[0][0] != "pipeline" {
+		t.Fatalf("first warning code = %q, want pipeline", warnings[0][0])
+	}
+	if !containsAll(warnings[0][1], []string{"found pipeline operator", "|"}) {
+		t.Fatalf("unexpected pipeline warning %q", warnings[0][1])
+	}
+	if warnings[1][0] != "redirect" {
+		t.Fatalf("second warning code = %q, want redirect", warnings[1][0])
+	}
+	if !containsAll(warnings[1][1], []string{"found shell redirection operator", ">"}) {
+		t.Fatalf("unexpected redirect warning %q", warnings[1][1])
+	}
+	if warnings[2][0] != "ignored-command" {
+		t.Fatalf("third warning code = %q, want ignored-command", warnings[2][0])
+	}
+}
+
+func containsAll(s string, subs []string) bool {
+	for _, sub := range subs {
+		if !strings.Contains(s, sub) {
+			return false
+		}
+	}
+	return true
 }
 
 func TestParseBasicAuthAndHeadAndURLFlag(t *testing.T) {
