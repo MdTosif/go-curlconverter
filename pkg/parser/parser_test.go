@@ -42,7 +42,14 @@ func TestParseDataAsciiAndHeaders(t *testing.T) {
 	if got := req.Headers["X-Test"]; got != "yes" {
 		t.Fatalf("unexpected header value %q", got)
 	}
-	if len(req.HeaderKV) != 1 || req.HeaderKV[0].Key != "X-Test" || req.HeaderKV[0].Value != "yes" {
+	if got := req.Headers["Content-Type"]; got != "application/x-www-form-urlencoded" {
+		t.Fatalf("unexpected Content-Type %q", got)
+	}
+	if len(req.HeaderKV) != 2 ||
+		req.HeaderKV[0].Key != "X-Test" ||
+		req.HeaderKV[0].Value != "yes" ||
+		req.HeaderKV[1].Key != "Content-Type" ||
+		req.HeaderKV[1].Value != "application/x-www-form-urlencoded" {
 		t.Fatalf("unexpected ordered headers: %#v", req.HeaderKV)
 	}
 }

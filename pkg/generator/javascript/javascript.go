@@ -153,6 +153,9 @@ func shouldUseURLSearchParams(r *request.Request, headers []request.Header, raw 
 	if raw == "" {
 		return false
 	}
+	if r.AutoContentType {
+		return false
+	}
 	if _, ok := r.Headers["Content-Type"]; !ok {
 		return false
 	}
