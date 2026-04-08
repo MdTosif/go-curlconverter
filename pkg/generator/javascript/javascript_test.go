@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/mdtosif/go-curlconverter/pkg/parser"
+	"github.com/mdtosif/go-curlconverter/pkg/request"
 )
 
 func TestGenerateMatchesSelectedCurlconverterFixtures(t *testing.T) {
@@ -30,6 +31,16 @@ func TestGenerateMatchesSelectedCurlconverterFixtures(t *testing.T) {
 			name:         "post empty",
 			commandFile:  "post_empty.sh",
 			expectedFile: "post_empty.js",
+		},
+		{
+			name:         "get with data",
+			commandFile:  "get_with_data.sh",
+			expectedFile: "get_with_data.js",
+		},
+		{
+			name:         "multiple d post",
+			commandFile:  "multiple_d_post.sh",
+			expectedFile: "multiple_d_post.js",
 		},
 	}
 
@@ -99,5 +110,94 @@ func TestGenerateIncludesCookieHeaderFromFlag(t *testing.T) {
 
 	if code != expected {
 		t.Fatalf("unexpected generated code\nexpected:\n%s\nactual:\n%s", expected, code)
+	}
+}
+
+func TestGenerateJsonBodyMatchesFixtureStyle(t *testing.T) {
+	req, err := parser.Parse(`curl --json '{ "drink":' --json ' "coffe" }' http://localhost:28139`)
+	if err != nil {
+		t.Fatalf("parse failed: %v", err)
+	}
+
+	code := Generate(req)
+	expected := "fetch('http://localhost:28139', {\n" +
+		"  method: 'POST',\n" +
+		"  headers: {\n" +
+		"    'Content-Type': 'application/json',\n" +
+		"    'Accept': 'application/json'\n" +
+		"  },\n" +
+		"  // body: '{ \"drink\": \"coffe\" }',\n" +
+		"  body: JSON.stringify({\n" +
+		"    'drink': 'coffe'\n" +
+		"  })\n" +
+		"});\n"
+
+	if code != expected {
+		t.Fatalf("unexpected generated code\nexpected:\n%s\nactual:\n%s", expected, code)
+	}
+}
+
+func TestGenerateSimpleGetWithoutHeadersOrBody(t *testing.T) {
+	req, err := parser.Parse(`curl 'https://example.com'`)
+	if err != nil {
+		t.Fatalf("parse failed: %v", err)
+	}
+
+	code := Generate(req)
+	expected := "fetch('https://example.com');\n"
+	if code != expected {
+		t.Fatalf("unexpected generated code\nexpected:\n%s\nactual:\n%s", expected, code)
+	}
+}
+
+func TestGenerateAddsDefaultFormContentType(t *testing.T) {
+	req, err := parser.Parse(`curl 'https://example.com/form' --data 'a=1&b=2'`)
+	if err != nil {
+		t.Fatalf("parse failed: %v", err)
+	}
+
+	code := Generate(req)
+	expected := "fetch('https://example.com/form', {\n" +
+		"  method: 'POST',\n" +
+		"  headers: {\n" +
+		"    'Content-Type': 'application/x-www-form-urlencoded'\n" +
+		"  },\n" +
+		"  body: 'a=1&b=2'\n" +
+		"});\n"
+
+	if code != expected {
+		t.Fatalf("unexpected generated code\nexpected:\n%s\nactual:\n%s", expected, code)
+	}
+}
+
+func TestGenerateInvalidJSONFallsBackToRawStringBody(t *testing.T) {
+	req, err := parser.Parse(`curl --json '{ "drink":' http://localhost:28139`)
+	if err != nil {
+		t.Fatalf("parse failed: %v", err)
+	}
+
+	code := Generate(req)
+	expected := "fetch('http://localhost:28139', {\n" +
+		"  method: 'POST',\n" +
+		"  headers: {\n" +
+		"    'Content-Type': 'application/json',\n" +
+		"    'Accept': 'application/json'\n" +
+		"  },\n" +
+		"  body: '{ \"drink\":'\n" +
+		"});\n"
+
+	if code != expected {
+		t.Fatalf("unexpected generated code\nexpected:\n%s\nactual:\n%s", expected, code)
+	}
+}
+
+func TestGenerateReturnsEmptyStringForNilOrMissingURL(t *testing.T) {
+	if got := Generate(nil); got != "" {
+		t.Fatalf("expected empty string for nil request, got %q", got)
+	}
+
+	got := Generate(&request.Request{})
+	if got != "" {
+		t.Fatalf("expected empty string for request without URL, got %q", got)
 	}
 }

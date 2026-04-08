@@ -1,6 +1,9 @@
 package javascript
 
 import (
+	"encoding/json"
+	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/mdtosif/go-curlconverter/pkg/request"
@@ -42,7 +45,11 @@ func Generate(r *request.Request) string {
 		lines = append(lines, "  headers: {\n"+strings.Join(headerLines, ",\n")+"\n  }")
 	}
 	if r.HasBody {
-		lines = append(lines, "  body: '"+escapeSingle(r.Body)+"'")
+		if r.JSONBody {
+			lines = append(lines, renderJSONBody(r.Body)...)
+		} else {
+			lines = append(lines, "  body: '"+escapeSingle(r.Body)+"'")
+		}
 	}
 
 	if len(lines) == 0 {
@@ -65,4 +72,60 @@ func hasHeader(headers []request.Header, name string) bool {
 		}
 	}
 	return false
+}
+
+func renderJSONBody(raw string) []string {
+	var parsed any
+	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
+		return []string{"  body: '" + escapeSingle(raw) + "'"}
+	}
+
+	return []string{
+		"  // body: '" + escapeSingle(raw) + "'",
+		"  body: JSON.stringify(" + jsJSONValue(parsed, 1) + ")",
+	}
+}
+
+func jsJSONValue(v any, indentLevel int) string {
+	indent := strings.Repeat("  ", indentLevel)
+	nextIndent := strings.Repeat("  ", indentLevel+1)
+
+	switch value := v.(type) {
+	case map[string]any:
+		if len(value) == 0 {
+			return "{}"
+		}
+		keys := make([]string, 0, len(value))
+		for key := range value {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		lines := make([]string, 0, len(keys))
+		for _, key := range keys {
+			lines = append(lines, nextIndent+"'"+escapeSingle(key)+"': "+jsJSONValue(value[key], indentLevel+1))
+		}
+		return "{\n" + strings.Join(lines, ",\n") + "\n" + indent + "}"
+	case []any:
+		if len(value) == 0 {
+			return "[]"
+		}
+		lines := make([]string, 0, len(value))
+		for _, item := range value {
+			lines = append(lines, nextIndent+jsJSONValue(item, indentLevel+1))
+		}
+		return "[\n" + strings.Join(lines, ",\n") + "\n" + indent + "]"
+	case string:
+		return "'" + escapeSingle(value) + "'"
+	case bool:
+		if value {
+			return "true"
+		}
+		return "false"
+	case nil:
+		return "null"
+	case float64:
+		return fmt.Sprintf("%v", value)
+	default:
+		return "'" + escapeSingle(fmt.Sprintf("%v", value)) + "'"
+	}
 }
