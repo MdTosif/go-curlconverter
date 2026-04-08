@@ -8,12 +8,13 @@ import (
 	gogen "github.com/mdtosif/go-curlconverter/pkg/generator/golang"
 	jsgen "github.com/mdtosif/go-curlconverter/pkg/generator/javascript"
 	axgen "github.com/mdtosif/go-curlconverter/pkg/generator/nodeaxios"
+	pygen "github.com/mdtosif/go-curlconverter/pkg/generator/python"
 	"github.com/mdtosif/go-curlconverter/pkg/parser"
 )
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Println("Usage: curlconv [--language javascript|node-axios|go|parser] \"curl ...\"")
+		fmt.Println("Usage: curlconv [--language javascript|node-axios|go|python|parser] \"curl ...\"")
 		os.Exit(2)
 	}
 
@@ -24,7 +25,7 @@ func main() {
 		args = args[2:]
 	}
 	if len(args) == 0 {
-		fmt.Println("Usage: curlconv [--language javascript|node-axios|go|parser] \"curl ...\"")
+		fmt.Println("Usage: curlconv [--language javascript|node-axios|go|python|parser] \"curl ...\"")
 		os.Exit(2)
 	}
 
@@ -44,6 +45,9 @@ func main() {
 		fmt.Print(code)
 	case "go":
 		code := gogen.Generate(reqs[0])
+		fmt.Print(code)
+	case "python":
+		code := pygen.Generate(reqs[0])
 		fmt.Print(code)
 	case "parser":
 		jsonOutput, err := parser.MarshalJSON(reqs)
