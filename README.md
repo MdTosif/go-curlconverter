@@ -118,6 +118,104 @@ If your environment blocks the default Go build cache location, use:
 GOCACHE=/tmp/go-build-cache go install github.com/mdtosif/go-curlconverter/cmd/curlconv@latest
 ```
 
+Use it as a library in another Go module with:
+
+```sh
+go get github.com/mdtosif/go-curlconverter@latest
+```
+
+If your environment blocks the default Go build cache location, use:
+
+```sh
+GOCACHE=/tmp/go-build-cache go get github.com/mdtosif/go-curlconverter@latest
+```
+
+## Use As A Library
+
+Basic conversion from a curl string:
+
+```go
+package main
+
+import (
+	"fmt"
+	"log"
+
+	curlconverter "github.com/mdtosif/go-curlconverter"
+)
+
+func main() {
+	code, err := curlconverter.ToJavaScript(`curl https://example.com -H 'Accept: application/json'`)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println(code)
+}
+```
+
+Parse once and generate different outputs from the request model:
+
+```go
+package main
+
+import (
+	"fmt"
+	"log"
+
+	curlconverter "github.com/mdtosif/go-curlconverter"
+)
+
+func main() {
+	req, err := curlconverter.ParseRequest(`curl https://example.com/api -d 'name=codex'`)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println(curlconverter.GenerateJavaScript(req))
+	fmt.Println(curlconverter.GenerateNodeAxios(req))
+	fmt.Println(curlconverter.GenerateGo(req))
+	fmt.Println(curlconverter.GeneratePython(req))
+}
+```
+
+To inspect parser JSON in your own code:
+
+```go
+package main
+
+import (
+	"fmt"
+	"log"
+
+	curlconverter "github.com/mdtosif/go-curlconverter"
+)
+
+func main() {
+	jsonOutput, err := curlconverter.ParseJSON(`curl https://example.com -b cookie.txt`)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println(jsonOutput)
+}
+```
+
+Current top-level library helpers include:
+
+- `Parse`
+- `ParseRequest`
+- `ParseJSON`
+- `ToJavaScript`
+- `ToNodeAxios`
+- `ToGo`
+- `ToPython`
+- `GenerateJavaScript`
+- `GenerateNodeAxios`
+- `GenerateGo`
+- `GeneratePython`
+- `SupportedLanguages`
+
 ## Run
 
 ```sh

@@ -41,7 +41,6 @@ GOCACHE=/tmp/go-build-cache go test ./...
   - intentionally ignore proxy settings in browser `fetch()` output to match upstream JS behavior
   - generate real `readFile(...)` calls for upload-file, multipart file parts, and file-backed body cases
 - Copied the upstream test corpus into [`go/test/fixtures`](/Users/tofiquem/tosif-practice/go-curl/curlconverter/go/test/fixtures) so the Go project no longer depends on the repo-root `test/` tree.
-- Copied [`test/test.ts`](/Users/tofiquem/tosif-practice/go-curl/curlconverter/go/test/test.ts) and [`test/test-utils.ts`](/Users/tofiquem/tosif-practice/go-curl/curlconverter/go/test/test-utils.ts) into the Go project for local reference.
 - Added [`go/test/go.mod`](/Users/tofiquem/tosif-practice/go-curl/curlconverter/go/test/go.mod) so copied `.go` fixture files are not compiled by the main module during `go test ./...`.
 - Updated all Go tests to read from the local fixture copy inside `go/test/fixtures`.
 - Verified fixture coverage currently in place:
