@@ -20,10 +20,39 @@ GOCACHE=/tmp/go-build-cache go test ./...
   - request objects now carry parser-facing fields such as cookies, cookieFiles, compressed, dataArray, and `isDataRaw` / `isDataBinary`
 - Fixed the Go tokenizer so empty quoted arguments like `--data-binary ""` are preserved.
 - Added support for common multiline shell ergonomics including line continuations and inline comments.
+- Added limited support for multiple chained `curl` commands when separated by standalone `;`, `&&`, or `||` tokens.
+- Extended that chained-command support to compact raw shell forms without surrounding spaces, such as `curl a;curl b` and `curl a&&curl b`.
+- Added limited raw-shell mixed command support:
+  - non-`curl` commands around `curl` commands in raw shell strings are ignored instead of failing the whole parse
+  - parser warnings use `ignored-command` for those skipped command chunks
+- Extended raw-shell extraction so `curl` can still be found cleanly inside simple pipeline-shaped command lists, and redirect operators/targets are ignored for parsing purposes.
 - Added support for compact short-option request syntax such as `-XPATCH`.
 - Added support for `--data-ascii`, `-G/--get`, `--json`, `-I/--head`, `-u/--user`, `--url`, `-F/--form`, `--form-string`, `-x/--proxy`, `-U/--proxy-user`, `-T/--upload-file`, `--digest`, `--compressed`, and cookie-file detection for `-b`.
 - Preserved header insertion order in the Go request model so fixture comparisons are stable.
 - Added parser JSON marshaling support and CLI output with `--language parser`.
+- Added argv-slice parsing support so the Go API can accept tokenized `[]string` input in addition to raw curl command strings.
+- Added the first real warning-returning behavior in the Go API for the current subset:
+  - `next` when multiple requests are present and only the first will be converted
+  - `multiple-urls` when a generator only uses the first URL
+  - `cookie-files` when `-b/--cookie` points at a file but the generator does not support it
+  - `unsafe-data` when a generator cannot faithfully reproduce file-backed body data
+- Added parser-originated warning support with underlined source snippets for the current tokenizer:
+  - `unterminated-single-quote`
+  - `unterminated-double-quote`
+  - `dangling-backslash`
+- Added parser-originated shell expansion warnings for the raw-string parser path:
+  - `expansion` for `$VAR`, `${...}`, `$(...)`, and backticks
+  - `special_variable_name` for Bash special variables such as `$?`
+- Added more shell-structure warnings for the raw-string parser path:
+  - `unescaped-newline` for `\` followed by whitespace before a newline
+  - `background` for single `&`
+  - `pipeline` for `|` / `||`
+  - `redirect` for `<`, `>`, `<<`, `>>`
+  - `ignored-command` for non-`curl` command chunks skipped in raw shell input
+- Added parse-level warning APIs in the root package so warnings can be retrieved without running a generator:
+  - `ParseWarn`, `ParseArgsWarn`
+  - `ParseRequestWarn`, `ParseRequestArgsWarn`
+  - `ParseJSONWarn`, `ParseJSONArgsWarn`
 - Added a root Go API in [`curlconverter.go`](/Users/tofiquem/tosif-practice/go-curl/curlconverter/go/curlconverter.go) with parsing and generator entrypoints.
 - Added and tested these output generators:
   - JavaScript `fetch()` in [`pkg/generator/javascript`](/Users/tofiquem/tosif-practice/go-curl/curlconverter/go/pkg/generator/javascript)
@@ -76,3 +105,32 @@ Examples still out of scope include:
   - copying any newly needed fixture directories into `go/test/fixtures`
   - updating Go tests to read only from `go/test/fixtures`
   - keeping `go test ./...` green without any dependency on the repo-root `test/` tree
+
+## Remaining 1:1 Port Roadmap
+
+- Milestone 1: core parser parity
+  - in progress: add real multi-request behavior for `--next`
+  - in progress: add limited support for multiple chained `curl` commands
+  - in progress: add upstream-style `string | string[]` parser entrypoints
+  - in progress: port the first warning codes through the Go `Warn` APIs
+  - in progress: port source-underline formatting and parser-originated warnings for the current tokenizer
+  - in progress: port richer shell/tokenizer warning coverage from upstream `src/shell/tokenizer.ts`
+  - next: add more shell-structure warnings such as unsupported syntax nodes, redirect combinations, and command-shape diagnostics
+  - next: port more shell syntax from upstream `src/shell/`
+  - next: close remaining curl option-table and precedence gaps
+- Milestone 2: shared request/normalization parity
+  - port more of upstream `Request.ts`, `Headers.ts`, `Query.ts`, and `src/curl/*`
+  - remove lossy or generator-specific shortcuts in the parser model
+- Milestone 3: existing generator parity
+  - replace the Python local-fixture exact-match shortcut with a real parity implementation
+  - tighten JavaScript `fetch()`, Node Axios, and Go output to byte-for-byte fixture parity
+- Milestone 4: remaining JavaScript-family generators
+  - port XHR, jQuery, Node fetch, node-http, got, ky, request, and superagent
+- Milestone 5: remaining upstream generators
+  - port JSON/HTTP/HAR first
+  - then Python HTTP, PHP variants, Ruby variants, Java variants, and the smaller standalone targets
+- Milestone 6: CLI and public API parity
+  - add upstream-like entrypoints, warning-returning variants, stdin handling, and fuller language coverage
+- Milestone 7: full parity gate
+  - keep all copied fixtures under `go/test/fixtures`
+  - make full fixture parity under `go test ./...` the acceptance gate

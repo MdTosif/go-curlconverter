@@ -11,8 +11,8 @@ import (
 	"github.com/mdtosif/go-curlconverter/pkg/request"
 )
 
-type Warning [2]string
-type Warnings []Warning
+type Warning = parser.Warning
+type Warnings = parser.Warnings
 
 var ErrNoRequests = errors.New("curlconverter: no requests parsed from input")
 
@@ -22,6 +22,18 @@ func SupportedLanguages() []string {
 
 func Parse(curlCommand string) ([]*request.Request, error) {
 	return parser.ParseAll(curlCommand)
+}
+
+func ParseWarn(curlCommand string) ([]*request.Request, Warnings, error) {
+	return parser.ParseAllWarn(curlCommand)
+}
+
+func ParseArgs(args []string) ([]*request.Request, error) {
+	return parser.ParseAllArgs(args)
+}
+
+func ParseArgsWarn(args []string) ([]*request.Request, Warnings, error) {
+	return parser.ParseAllArgsWarn(args)
 }
 
 func ParseRequest(curlCommand string) (*request.Request, error) {
@@ -35,6 +47,39 @@ func ParseRequest(curlCommand string) (*request.Request, error) {
 	return reqs[0], nil
 }
 
+func ParseRequestWarn(curlCommand string) (*request.Request, Warnings, error) {
+	reqs, warnings, err := parser.ParseAllWarn(curlCommand)
+	if err != nil {
+		return nil, warnings, err
+	}
+	if len(reqs) == 0 {
+		return nil, warnings, ErrNoRequests
+	}
+	return reqs[0], warnings, nil
+}
+
+func ParseRequestArgs(args []string) (*request.Request, error) {
+	reqs, err := parser.ParseAllArgs(args)
+	if err != nil {
+		return nil, err
+	}
+	if len(reqs) == 0 {
+		return nil, ErrNoRequests
+	}
+	return reqs[0], nil
+}
+
+func ParseRequestArgsWarn(args []string) (*request.Request, Warnings, error) {
+	reqs, warnings, err := parser.ParseAllArgsWarn(args)
+	if err != nil {
+		return nil, warnings, err
+	}
+	if len(reqs) == 0 {
+		return nil, warnings, ErrNoRequests
+	}
+	return reqs[0], warnings, nil
+}
+
 func ParseJSON(curlCommand string) (string, error) {
 	reqs, err := parser.ParseAll(curlCommand)
 	if err != nil {
@@ -43,12 +88,54 @@ func ParseJSON(curlCommand string) (string, error) {
 	return parser.MarshalJSON(reqs)
 }
 
+func ParseJSONWarn(curlCommand string) (string, Warnings, error) {
+	reqs, warnings, err := parser.ParseAllWarn(curlCommand)
+	if err != nil {
+		return "", warnings, err
+	}
+	jsonOutput, err := parser.MarshalJSON(reqs)
+	return jsonOutput, warnings, err
+}
+
+func ParseJSONArgs(args []string) (string, error) {
+	reqs, err := parser.ParseAllArgs(args)
+	if err != nil {
+		return "", err
+	}
+	return parser.MarshalJSON(reqs)
+}
+
+func ParseJSONArgsWarn(args []string) (string, Warnings, error) {
+	reqs, warnings, err := parser.ParseAllArgsWarn(args)
+	if err != nil {
+		return "", warnings, err
+	}
+	jsonOutput, err := parser.MarshalJSON(reqs)
+	return jsonOutput, warnings, err
+}
+
 func GenerateJavaScript(req *request.Request) string {
 	return jsgen.Generate(req)
 }
 
 func ToJavaScript(curlCommand string) (string, error) {
-	req, err := ParseRequest(curlCommand)
+	reqs, err := parser.ParseAll(curlCommand)
+	if err != nil {
+		return "", err
+	}
+	req, _, err := getFirstRequest(reqs, nil, support{dataReadsFile: true})
+	if err != nil {
+		return "", err
+	}
+	return GenerateJavaScript(req), nil
+}
+
+func ToJavaScriptArgs(args []string) (string, error) {
+	reqs, err := parser.ParseAllArgs(args)
+	if err != nil {
+		return "", err
+	}
+	req, _, err := getFirstRequest(reqs, nil, support{dataReadsFile: true})
 	if err != nil {
 		return "", err
 	}
@@ -56,11 +143,15 @@ func ToJavaScript(curlCommand string) (string, error) {
 }
 
 func ToJavaScriptWarn(curlCommand string) (string, Warnings, error) {
-	code, err := ToJavaScript(curlCommand)
+	reqs, warnings, err := parser.ParseAllWarn(curlCommand)
 	if err != nil {
-		return "", nil, err
+		return "", warnings, err
 	}
-	return code, nil, nil
+	req, warnings, err := getFirstRequest(reqs, warnings, support{dataReadsFile: true})
+	if err != nil {
+		return "", warnings, err
+	}
+	return GenerateJavaScript(req), warnings, nil
 }
 
 func GenerateNodeAxios(req *request.Request) string {
@@ -68,7 +159,23 @@ func GenerateNodeAxios(req *request.Request) string {
 }
 
 func ToNodeAxios(curlCommand string) (string, error) {
-	req, err := ParseRequest(curlCommand)
+	reqs, err := parser.ParseAll(curlCommand)
+	if err != nil {
+		return "", err
+	}
+	req, _, err := getFirstRequest(reqs, nil, support{})
+	if err != nil {
+		return "", err
+	}
+	return GenerateNodeAxios(req), nil
+}
+
+func ToNodeAxiosArgs(args []string) (string, error) {
+	reqs, err := parser.ParseAllArgs(args)
+	if err != nil {
+		return "", err
+	}
+	req, _, err := getFirstRequest(reqs, nil, support{})
 	if err != nil {
 		return "", err
 	}
@@ -76,11 +183,15 @@ func ToNodeAxios(curlCommand string) (string, error) {
 }
 
 func ToNodeAxiosWarn(curlCommand string) (string, Warnings, error) {
-	code, err := ToNodeAxios(curlCommand)
+	reqs, warnings, err := parser.ParseAllWarn(curlCommand)
 	if err != nil {
-		return "", nil, err
+		return "", warnings, err
 	}
-	return code, nil, nil
+	req, warnings, err := getFirstRequest(reqs, warnings, support{})
+	if err != nil {
+		return "", warnings, err
+	}
+	return GenerateNodeAxios(req), warnings, nil
 }
 
 func GenerateGo(req *request.Request) string {
@@ -88,7 +199,23 @@ func GenerateGo(req *request.Request) string {
 }
 
 func ToGo(curlCommand string) (string, error) {
-	req, err := ParseRequest(curlCommand)
+	reqs, err := parser.ParseAll(curlCommand)
+	if err != nil {
+		return "", err
+	}
+	req, _, err := getFirstRequest(reqs, nil, support{dataReadsFile: true})
+	if err != nil {
+		return "", err
+	}
+	return GenerateGo(req), nil
+}
+
+func ToGoArgs(args []string) (string, error) {
+	reqs, err := parser.ParseAllArgs(args)
+	if err != nil {
+		return "", err
+	}
+	req, _, err := getFirstRequest(reqs, nil, support{dataReadsFile: true})
 	if err != nil {
 		return "", err
 	}
@@ -96,11 +223,15 @@ func ToGo(curlCommand string) (string, error) {
 }
 
 func ToGoWarn(curlCommand string) (string, Warnings, error) {
-	code, err := ToGo(curlCommand)
+	reqs, warnings, err := parser.ParseAllWarn(curlCommand)
 	if err != nil {
-		return "", nil, err
+		return "", warnings, err
 	}
-	return code, nil, nil
+	req, warnings, err := getFirstRequest(reqs, warnings, support{dataReadsFile: true})
+	if err != nil {
+		return "", warnings, err
+	}
+	return GenerateGo(req), warnings, nil
 }
 
 func GeneratePython(req *request.Request) string {
@@ -111,7 +242,23 @@ func ToPython(curlCommand string) (string, error) {
 	if code, err := pygen.GenerateCommand(curlCommand); err == nil {
 		return code, nil
 	}
-	req, err := ParseRequest(curlCommand)
+	reqs, err := parser.ParseAll(curlCommand)
+	if err != nil {
+		return "", err
+	}
+	req, _, err := getFirstRequest(reqs, nil, support{})
+	if err != nil {
+		return "", err
+	}
+	return GeneratePython(req), nil
+}
+
+func ToPythonArgs(args []string) (string, error) {
+	reqs, err := parser.ParseAllArgs(args)
+	if err != nil {
+		return "", err
+	}
+	req, _, err := getFirstRequest(reqs, nil, support{})
 	if err != nil {
 		return "", err
 	}
@@ -119,9 +266,16 @@ func ToPython(curlCommand string) (string, error) {
 }
 
 func ToPythonWarn(curlCommand string) (string, Warnings, error) {
-	code, err := ToPython(curlCommand)
+	reqs, warnings, err := parser.ParseAllWarn(curlCommand)
 	if err != nil {
-		return "", nil, err
+		return "", warnings, err
 	}
-	return code, nil, nil
+	req, warnings, err := getFirstRequest(reqs, warnings, support{})
+	if err != nil {
+		return "", warnings, err
+	}
+	if code, err := pygen.GenerateCommand(curlCommand); err == nil {
+		return code, warnings, nil
+	}
+	return GeneratePython(req), warnings, nil
 }

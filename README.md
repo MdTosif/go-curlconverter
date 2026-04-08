@@ -62,6 +62,7 @@ Current behavior includes:
 - when a body exists and no explicit `Content-Type` header is provided, the generator adds `application/x-www-form-urlencoded`
 - browser `fetch()` output intentionally ignores proxy settings, matching the upstream JavaScript fixture behavior
 - line continuations and inline shell comments are handled for common multiline curl snippets
+- limited chained command parsing is supported when multiple commands are separated by `;`, `&&`, `||`, single `&`, or pipelines, including compact forms without surrounding spaces such as `curl a;curl b` or `curl a&curl b`; raw shell strings can ignore non-`curl` commands around `curl` inputs with warnings, and simple redirect targets like `> out.txt` are ignored for parsing purposes
 - parser JSON output is available from the CLI with `--language parser`
 - the Python output target includes a local-fixture-backed exact-match path for copied upstream commands so the full local Python fixture corpus passes inside the Go project
 
@@ -179,6 +180,36 @@ func main() {
 }
 ```
 
+If you already have tokenized argv input, you can skip shell-string parsing:
+
+```go
+package main
+
+import (
+	"fmt"
+	"log"
+
+	curlconverter "github.com/mdtosif/go-curlconverter"
+)
+
+func main() {
+	reqs, err := curlconverter.ParseArgs([]string{
+		"curl",
+		"https://example.com/items",
+		"-H", "Accept: application/json",
+		"--next",
+		"https://example.com/submit",
+		"-d", "name=codex",
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println(curlconverter.GenerateJavaScript(reqs[0]))
+	fmt.Println(curlconverter.GenerateJavaScript(reqs[1]))
+}
+```
+
 To inspect parser JSON in your own code:
 
 ```go
@@ -204,17 +235,32 @@ func main() {
 Current top-level library helpers include:
 
 - `Parse`
+- `ParseWarn`
+- `ParseArgs`
+- `ParseArgsWarn`
 - `ParseRequest`
+- `ParseRequestWarn`
+- `ParseRequestArgs`
+- `ParseRequestArgsWarn`
 - `ParseJSON`
+- `ParseJSONWarn`
+- `ParseJSONArgs`
+- `ParseJSONArgsWarn`
 - `ToJavaScript`
+- `ToJavaScriptArgs`
 - `ToNodeAxios`
+- `ToNodeAxiosArgs`
 - `ToGo`
+- `ToGoArgs`
 - `ToPython`
+- `ToPythonArgs`
 - `GenerateJavaScript`
 - `GenerateNodeAxios`
 - `GenerateGo`
 - `GeneratePython`
 - `SupportedLanguages`
+
+The `Warn` variants currently surface parser and generator warnings for the implemented subset, including multi-request `--next`, multiple URLs, cookie-file inputs, file-backed body inputs, ignored non-`curl` commands in raw shell strings, raw-string tokenizer issues such as unterminated quotes and dangling trailing backslashes, shell-expansion markers such as `$VAR`, `${VAR}`, `$(...)`, backticks, and special Bash variables like `$?`, plus shell-structure markers such as suspicious line continuations, background operators, pipelines, and redirection operators.
 
 ## Run
 

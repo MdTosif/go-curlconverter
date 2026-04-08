@@ -6,19 +6,32 @@ import (
 	"errors"
 	"net/url"
 	"path"
+	"strconv"
 	"strings"
 
 	"github.com/mdtosif/go-curlconverter/pkg/request"
 )
 
 func tokenize(s string) []string {
+	toks, _ := tokenizeWithWarnings(s)
+	return toks
+}
+
+func tokenizeWithWarnings(s string) ([]string, Warnings) {
 	var out []string
 	var cur strings.Builder
 	inSingle, inDouble, esc := false, false, false
+	singleStart, doubleStart, escapeStart := -1, -1, -1
+	skipByteIndex := -1
 	tokenStarted := false
 	canStartComment := true
 	commentLine := false
-	for _, r := range s {
+	var warnings Warnings
+	for i, r := range s {
+		if i == skipByteIndex {
+			skipByteIndex = -1
+			continue
+		}
 		if commentLine {
 			if r == '\n' {
 				commentLine = false
@@ -41,6 +54,7 @@ func tokenize(s string) []string {
 		if r == '\\' {
 			if !inSingle {
 				esc = true
+				escapeStart = i
 				continue
 			}
 			cur.WriteRune(r)
@@ -50,12 +64,22 @@ func tokenize(s string) []string {
 		}
 		if r == '\'' && !inDouble {
 			inSingle = !inSingle
+			if inSingle {
+				singleStart = i
+			} else {
+				singleStart = -1
+			}
 			tokenStarted = true
 			canStartComment = false
 			continue
 		}
 		if r == '"' && !inSingle {
 			inDouble = !inDouble
+			if inDouble {
+				doubleStart = i
+			} else {
+				doubleStart = -1
+			}
 			tokenStarted = true
 			canStartComment = false
 			continue
@@ -68,6 +92,54 @@ func tokenize(s string) []string {
 			}
 			commentLine = true
 			continue
+		}
+		if !inSingle && !inDouble {
+			if r == ';' {
+				if tokenStarted {
+					out = append(out, cur.String())
+					cur.Reset()
+					tokenStarted = false
+				}
+				out = append(out, ";")
+				canStartComment = true
+				continue
+			}
+			if (r == '&' || r == '|') && i+1 < len(s) && rune(s[i+1]) == r {
+				if tokenStarted {
+					out = append(out, cur.String())
+					cur.Reset()
+					tokenStarted = false
+				}
+				out = append(out, string([]byte{byte(r), byte(r)}))
+				canStartComment = true
+				skipByteIndex = i + 1
+				continue
+			}
+			if r == '&' {
+				if tokenStarted {
+					out = append(out, cur.String())
+					cur.Reset()
+					tokenStarted = false
+				}
+				out = append(out, "&")
+				canStartComment = true
+				continue
+			}
+			if r == '|' || r == '<' || r == '>' {
+				if tokenStarted {
+					out = append(out, cur.String())
+					cur.Reset()
+					tokenStarted = false
+				}
+				op := string(r)
+				if (r == '<' || r == '>') && i+1 < len(s) && rune(s[i+1]) == r {
+					op += string(r)
+					skipByteIndex = i + 1
+				}
+				out = append(out, op)
+				canStartComment = true
+				continue
+			}
 		}
 		if !inSingle && !inDouble && r == '\r' {
 			continue
@@ -88,16 +160,267 @@ func tokenize(s string) []string {
 	if tokenStarted {
 		out = append(out, cur.String())
 	}
-	return out
+	warnings = append(warnings, scanShellWarnings(s)...)
+	if inSingle && singleStart >= 0 {
+		warnings = append(warnings, Warning{
+			"unterminated-single-quote",
+			"found unterminated single-quoted string\n" + underlineRange(s, singleStart, len(s)),
+		})
+	}
+	if inDouble && doubleStart >= 0 {
+		warnings = append(warnings, Warning{
+			"unterminated-double-quote",
+			"found unterminated double-quoted string\n" + underlineRange(s, doubleStart, len(s)),
+		})
+	}
+	if esc && escapeStart >= 0 {
+		warnings = append(warnings, Warning{
+			"dangling-backslash",
+			"found trailing backslash that escapes nothing\n" + underlineRange(s, escapeStart, len(s)),
+		})
+	}
+	return out, warnings
 }
 
 func ParseAll(cmd string) ([]*request.Request, error) {
-	toks := tokenize(strings.TrimSpace(cmd))
+	reqs, _, err := ParseAllWarn(cmd)
+	return reqs, err
+}
+
+func ParseAllWarn(cmd string) ([]*request.Request, Warnings, error) {
+	trimmed := strings.TrimSpace(cmd)
+	toks, warnings := tokenizeWithWarnings(trimmed)
+	reqs, warnings, err := parseRawTokenArgs(toks, warnings)
+	return reqs, warnings, err
+}
+
+func ParseAllArgs(args []string) ([]*request.Request, error) {
+	reqs, _, err := ParseAllArgsWarn(args)
+	return reqs, err
+}
+
+func ParseAllArgsWarn(args []string) ([]*request.Request, Warnings, error) {
+	toks := append([]string(nil), args...)
+	reqs, err := parseTokenArgs(toks)
+	return reqs, nil, err
+}
+
+func parseRawTokenArgs(toks []string, warnings Warnings) ([]*request.Request, Warnings, error) {
+	if len(toks) == 0 {
+		return nil, warnings, errors.New("empty command")
+	}
+
+	commands := splitShellCommands(toks)
+	curlCommands := make([][]string, 0, len(commands))
+	for _, command := range commands {
+		if len(command) == 0 {
+			continue
+		}
+		if strings.TrimSpace(command[0]) == "curl" {
+			curlCommands = append(curlCommands, command)
+			continue
+		}
+		warnings = append(warnings, Warning{
+			"ignored-command",
+			"ignoring non-curl command starting with " + strconv.Quote(clip(command[0])),
+		})
+	}
+	if len(curlCommands) == 0 {
+		return nil, warnings, errors.New("command must start with 'curl'")
+	}
+
+	reqs := make([]*request.Request, 0, len(curlCommands))
+	for _, command := range curlCommands {
+		cleaned := stripRedirectTokens(command)
+		parsed, err := parseTokenArgs(cleaned)
+		if err != nil {
+			return nil, warnings, err
+		}
+		reqs = append(reqs, parsed...)
+	}
+	return reqs, warnings, nil
+}
+
+func splitShellCommands(toks []string) [][]string {
+	if len(toks) == 0 {
+		return nil
+	}
+
+	var commands [][]string
+	current := make([]string, 0, len(toks))
+	for _, tok := range toks {
+		if len(current) > 0 && isShellCommandBoundary(tok) {
+			commands = append(commands, current)
+			current = make([]string, 0, len(toks))
+			continue
+		}
+		current = append(current, tok)
+	}
+	if len(current) > 0 {
+		commands = append(commands, current)
+	}
+	return commands
+}
+
+func stripRedirectTokens(toks []string) []string {
+	cleaned := make([]string, 0, len(toks))
+	for i := 0; i < len(toks); i++ {
+		if isRedirectOperator(toks[i]) {
+			if i+1 < len(toks) {
+				i++
+			}
+			continue
+		}
+		cleaned = append(cleaned, toks[i])
+	}
+	return cleaned
+}
+
+func parseTokenArgs(toks []string) ([]*request.Request, error) {
 	if len(toks) == 0 {
 		return nil, errors.New("empty command")
 	}
-	if toks[0] != "curl" {
+	if strings.TrimSpace(toks[0]) != "curl" {
 		return nil, errors.New("command must start with 'curl'")
+	}
+
+	commands := splitCommandLists(toks)
+	reqs := make([]*request.Request, 0, len(commands))
+	for _, command := range commands {
+		if len(command) == 0 {
+			continue
+		}
+		if strings.TrimSpace(command[0]) != "curl" {
+			return nil, errors.New("command must start with 'curl'")
+		}
+		segments := splitOperations(command[1:])
+		if len(segments) == 0 {
+			return nil, errors.New("no URL found in command")
+		}
+		for _, segment := range segments {
+			req, err := parseOperation(segment)
+			if err != nil {
+				return nil, err
+			}
+			reqs = append(reqs, req)
+		}
+	}
+	return reqs, nil
+}
+
+func clip(s string) string {
+	if len(s) > 30 {
+		return s[:27] + "..."
+	}
+	return s
+}
+
+func splitCommandLists(toks []string) [][]string {
+	if len(toks) == 0 {
+		return nil
+	}
+
+	var commands [][]string
+	current := make([]string, 0, len(toks))
+	for _, tok := range toks {
+		if len(current) > 0 && isCommandSeparator(tok) {
+			commands = append(commands, current)
+			current = make([]string, 0, len(toks))
+			continue
+		}
+		current = append(current, tok)
+	}
+	if len(current) > 0 {
+		commands = append(commands, current)
+	}
+	return commands
+}
+
+func isCommandSeparator(tok string) bool {
+	switch tok {
+	case ";", "&&", "||":
+		return true
+	default:
+		return false
+	}
+}
+
+func isShellCommandBoundary(tok string) bool {
+	switch tok {
+	case ";", "&&", "||", "|", "&":
+		return true
+	default:
+		return false
+	}
+}
+
+func isRedirectOperator(tok string) bool {
+	switch tok {
+	case "<", ">", "<<", ">>":
+		return true
+	default:
+		return false
+	}
+}
+
+func splitOperations(args []string) [][]string {
+	if len(args) == 0 {
+		return nil
+	}
+
+	var segments [][]string
+	current := make([]string, 0, len(args))
+	for _, arg := range args {
+		if arg == "--next" {
+			if operationHasURL(current) {
+				segments = append(segments, current)
+				current = make([]string, 0, len(args))
+			}
+			continue
+		}
+		current = append(current, arg)
+	}
+	if len(current) > 0 {
+		segments = append(segments, current)
+	}
+	return segments
+}
+
+func operationHasURL(args []string) bool {
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch arg {
+		case "-X", "--request",
+			"-T", "--upload-file",
+			"-x", "--proxy",
+			"-A", "--user-agent",
+			"-e", "--referer",
+			"--oauth2-bearer",
+			"-U", "--proxy-user",
+			"-H", "--header",
+			"-b", "--cookie",
+			"-u", "--user",
+			"-d", "--data", "--data-raw", "--data-binary", "--data-ascii",
+			"-F", "--form", "--form-string",
+			"--json":
+			i++
+		case "--url":
+			if i+1 < len(args) && args[i+1] != "" {
+				return true
+			}
+			i++
+		default:
+			if !strings.HasPrefix(arg, "-") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func parseOperation(toks []string) (*request.Request, error) {
+	if len(toks) == 0 {
+		return nil, errors.New("no URL found in command")
 	}
 
 	r := &request.Request{
@@ -124,7 +447,7 @@ func ParseAll(cmd string) ([]*request.Request, error) {
 	pendingReferer := ""
 	lastDataFlag := ""
 
-	for i := 1; i < len(toks); i++ {
+	for i := 0; i < len(toks); i++ {
 		t := toks[i]
 		if strings.HasPrefix(t, "-X") && len(t) > 2 && t != "-X" {
 			r.Method = t[2:]
@@ -364,7 +687,7 @@ func ParseAll(cmd string) ([]*request.Request, error) {
 		r.Cookies = parseCookies(cookieHeader)
 	}
 
-	return []*request.Request{r}, nil
+	return r, nil
 }
 
 func Parse(cmd string) (*request.Request, error) {
@@ -373,6 +696,30 @@ func Parse(cmd string) (*request.Request, error) {
 		return nil, err
 	}
 	return reqs[0], nil
+}
+
+func ParseWarn(cmd string) (*request.Request, Warnings, error) {
+	reqs, warnings, err := ParseAllWarn(cmd)
+	if err != nil {
+		return nil, warnings, err
+	}
+	return reqs[0], warnings, nil
+}
+
+func ParseArgs(args []string) (*request.Request, error) {
+	reqs, err := ParseAllArgs(args)
+	if err != nil {
+		return nil, err
+	}
+	return reqs[0], nil
+}
+
+func ParseArgsWarn(args []string) (*request.Request, Warnings, error) {
+	reqs, warnings, err := ParseAllArgsWarn(args)
+	if err != nil {
+		return nil, warnings, err
+	}
+	return reqs[0], warnings, nil
 }
 
 func MarshalJSON(reqs []*request.Request) (string, error) {
