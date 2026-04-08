@@ -42,7 +42,14 @@ func TestParseDataAsciiAndHeaders(t *testing.T) {
 	if got := req.Headers["X-Test"]; got != "yes" {
 		t.Fatalf("unexpected header value %q", got)
 	}
-	if len(req.HeaderKV) != 1 || req.HeaderKV[0].Key != "X-Test" || req.HeaderKV[0].Value != "yes" {
+	if got := req.Headers["Content-Type"]; got != "application/x-www-form-urlencoded" {
+		t.Fatalf("unexpected Content-Type %q", got)
+	}
+	if len(req.HeaderKV) != 2 ||
+		req.HeaderKV[0].Key != "X-Test" ||
+		req.HeaderKV[0].Value != "yes" ||
+		req.HeaderKV[1].Key != "Content-Type" ||
+		req.HeaderKV[1].Value != "application/x-www-form-urlencoded" {
 		t.Fatalf("unexpected ordered headers: %#v", req.HeaderKV)
 	}
 }
@@ -151,10 +158,20 @@ func TestParseErrors(t *testing.T) {
 		{name: "empty command", cmd: "", want: "empty command"},
 		{name: "non curl command", cmd: "echo hi", want: "command must start with 'curl'"},
 		{name: "missing request arg", cmd: "curl -X", want: "missing argument for -X/--request"},
+		{name: "missing upload file arg", cmd: "curl -T", want: "missing argument for -T/--upload-file"},
+		{name: "missing proxy arg", cmd: "curl -x", want: "missing argument for -x/--proxy"},
+		{name: "missing proxy user arg", cmd: "curl -U", want: "missing argument for -U/--proxy-user"},
+		{name: "missing user agent arg", cmd: "curl -A", want: "missing argument for -A/--user-agent"},
+		{name: "missing referer arg", cmd: "curl -e", want: "missing argument for -e/--referer"},
+		{name: "missing bearer arg", cmd: "curl --oauth2-bearer", want: "missing argument for --oauth2-bearer"},
 		{name: "missing header arg", cmd: "curl -H", want: "missing argument for -H/--header"},
 		{name: "missing cookie arg", cmd: "curl -b", want: "missing argument for -b/--cookie"},
 		{name: "missing data arg", cmd: "curl --data", want: "missing argument for -d/--data"},
 		{name: "missing json arg", cmd: "curl --json", want: "missing argument for --json"},
+		{name: "missing user arg", cmd: "curl -u", want: "missing argument for -u/--user"},
+		{name: "missing url arg", cmd: "curl --url", want: "missing argument for --url"},
+		{name: "missing form arg", cmd: "curl -F", want: "missing argument for -F/--form"},
+		{name: "invalid form arg", cmd: "curl -F nope http://localhost", want: "invalid argument for -F/--form"},
 		{name: "missing url", cmd: "curl -H 'foo: bar'", want: "no URL found in command"},
 	}
 
@@ -171,5 +188,149 @@ func TestParseErrors(t *testing.T) {
 				t.Fatalf("expected error %q, got %q", tc.want, err.Error())
 			}
 		})
+	}
+}
+
+func TestParseBasicAuthAndHeadAndURLFlag(t *testing.T) {
+	t.Parallel()
+
+	req, err := Parse(`curl -I --url 'https://example.com/items' -u 'alice:secret'`)
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if req.Method != "HEAD" {
+		t.Fatalf("expected HEAD, got %q", req.Method)
+	}
+	if req.BasicAuth != "alice:secret" {
+		t.Fatalf("unexpected basic auth %q", req.BasicAuth)
+	}
+	if len(req.URLs) != 1 || req.URLs[0].URL != "https://example.com/items" {
+		t.Fatalf("unexpected URLs: %#v", req.URLs)
+	}
+}
+
+func TestParseProxyAndProxyUser(t *testing.T) {
+	t.Parallel()
+
+	req, err := Parse(`curl 'http://localhost:28139' --proxy 'http://localhost:8080' -U 'anonymous:anonymous'`)
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if req.Proxy != "http://localhost:8080" {
+		t.Fatalf("unexpected proxy %q", req.Proxy)
+	}
+	if req.ProxyAuth != "anonymous:anonymous" {
+		t.Fatalf("unexpected proxy auth %q", req.ProxyAuth)
+	}
+}
+
+func TestParseUploadFileSetsPutAndAppendsURLPath(t *testing.T) {
+	t.Parallel()
+
+	req, err := Parse(`curl http://localhost:28139 --upload-file file.txt`)
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if req.Method != "PUT" {
+		t.Fatalf("expected PUT, got %q", req.Method)
+	}
+	if req.BodyFile != "file.txt" {
+		t.Fatalf("unexpected body file %q", req.BodyFile)
+	}
+	if len(req.URLs) != 1 || req.URLs[0].URL != "http://localhost:28139/file.txt" {
+		t.Fatalf("unexpected URLs: %#v", req.URLs)
+	}
+}
+
+func TestParseDataBinaryFileUsesFileBody(t *testing.T) {
+	t.Parallel()
+
+	req, err := Parse(`curl -X POST --data-binary @./sample.sparql http://localhost:28139/query`)
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if req.Method != "POST" {
+		t.Fatalf("expected POST, got %q", req.Method)
+	}
+	if req.BodyFile != "./sample.sparql" {
+		t.Fatalf("unexpected body file %q", req.BodyFile)
+	}
+	if req.Body != "" {
+		t.Fatalf("expected empty inline body, got %q", req.Body)
+	}
+}
+
+func TestParseDigestAuthFlag(t *testing.T) {
+	t.Parallel()
+
+	req, err := Parse(`curl "http://localhost:28139/" -u "some_username:some_password" --digest`)
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if !req.DigestAuth {
+		t.Fatal("expected DigestAuth to be true")
+	}
+	if req.BasicAuth != "some_username:some_password" {
+		t.Fatalf("unexpected basic auth %q", req.BasicAuth)
+	}
+}
+
+func TestParseUserAgentRefererAndBearerFlags(t *testing.T) {
+	t.Parallel()
+
+	req, err := Parse(`curl http://localhost:28139 -A "SimCity" -e "https://website.com" --oauth2-bearer AAAAAAAAAAAA`)
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if got := req.Headers["User-Agent"]; got != "SimCity" {
+		t.Fatalf("unexpected User-Agent %q", got)
+	}
+	if got := req.Headers["Referer"]; got != "https://website.com" {
+		t.Fatalf("unexpected Referer %q", got)
+	}
+	if req.BearerToken != "AAAAAAAAAAAA" {
+		t.Fatalf("unexpected bearer token %q", req.BearerToken)
+	}
+}
+
+func TestParseHandlesLineContinuationsAndInlineComments(t *testing.T) {
+	t.Parallel()
+
+	req, err := Parse("curl \\\n  'https://example.com/api' \\\n  -H 'X-Test: yes' # ignore me\n  --data-raw 'a=1'")
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if len(req.URLs) != 1 || req.URLs[0].URL != "https://example.com/api" {
+		t.Fatalf("unexpected URLs: %#v", req.URLs)
+	}
+	if got := req.Headers["X-Test"]; got != "yes" {
+		t.Fatalf("unexpected header value %q", got)
+	}
+	if req.Body != "a=1" {
+		t.Fatalf("unexpected body %q", req.Body)
+	}
+}
+
+func TestParseMultipartForms(t *testing.T) {
+	t.Parallel()
+
+	req, err := Parse(`curl http://localhost:28139/api -F attributes='{"name":"tigers.jpeg"}' -F file=@myfile.jpg --form-string note='hello'`)
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if req.Method != "POST" {
+		t.Fatalf("expected POST, got %q", req.Method)
+	}
+	if len(req.FormParts) != 3 {
+		t.Fatalf("expected 3 form parts, got %#v", req.FormParts)
+	}
+	if req.FormParts[0].Name != "attributes" || req.FormParts[0].Value != `{"name":"tigers.jpeg"}` || req.FormParts[0].IsFile {
+		t.Fatalf("unexpected first form part %#v", req.FormParts[0])
+	}
+	if !req.FormParts[1].IsFile || req.FormParts[1].FileName != "myfile.jpg" || req.FormParts[1].Name != "file" {
+		t.Fatalf("unexpected file form part %#v", req.FormParts[1])
+	}
+	if req.FormParts[2].Name != "note" || req.FormParts[2].Value != "hello" || req.FormParts[2].IsFile {
+		t.Fatalf("unexpected string form part %#v", req.FormParts[2])
 	}
 }

@@ -42,6 +42,36 @@ func TestGenerateMatchesSelectedCurlconverterFixtures(t *testing.T) {
 			commandFile:  "multiple_d_post.sh",
 			expectedFile: "multiple_d_post.js",
 		},
+		{
+			name:         "get basic auth",
+			commandFile:  "get_basic_auth.sh",
+			expectedFile: "get_basic_auth.js",
+		},
+		{
+			name:         "head with I option",
+			commandFile:  "head_with_I_option.sh",
+			expectedFile: "head_with_I_option.js",
+		},
+		{
+			name:         "get proxy",
+			commandFile:  "get_proxy.sh",
+			expectedFile: "get_proxy.js",
+		},
+		{
+			name:         "get digest auth",
+			commandFile:  "get_digest_auth.sh",
+			expectedFile: "get_digest_auth.js",
+		},
+		{
+			name:         "get referer",
+			commandFile:  "get_referer.sh",
+			expectedFile: "get_referer.js",
+		},
+		{
+			name:         "get with form",
+			commandFile:  "get_with_form.sh",
+			expectedFile: "get_with_form.js",
+		},
 	}
 
 	for _, tc := range testCases {
@@ -199,5 +229,135 @@ func TestGenerateReturnsEmptyStringForNilOrMissingURL(t *testing.T) {
 	got := Generate(&request.Request{})
 	if got != "" {
 		t.Fatalf("expected empty string for request without URL, got %q", got)
+	}
+}
+
+func TestGenerateUsesURLSearchParamsForSimpleFormBodies(t *testing.T) {
+	req, err := parser.Parse(`curl 'http://localhost:28139/echo/html/' -H 'Content-Type: application/x-www-form-urlencoded; charset=UTF-8' --data 'msg1=wow&msg2=such'`)
+	if err != nil {
+		t.Fatalf("parse failed: %v", err)
+	}
+
+	code := Generate(req)
+	expected := "fetch('http://localhost:28139/echo/html/', {\n" +
+		"  method: 'POST',\n" +
+		"  headers: {\n" +
+		"    'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'\n" +
+		"  },\n" +
+		"  body: new URLSearchParams({\n" +
+		"    'msg1': 'wow',\n" +
+		"    'msg2': 'such'\n" +
+		"  })\n" +
+		"});\n"
+
+	if code != expected {
+		t.Fatalf("unexpected generated code\nexpected:\n%s\nactual:\n%s", expected, code)
+	}
+}
+
+func TestGenerateIgnoresProxyFlagsForBrowserFetchParity(t *testing.T) {
+	req, err := parser.Parse(`curl 'http://localhost:28139' --proxy 'http://localhost:8080' -U 'anonymous:anonymous'`)
+	if err != nil {
+		t.Fatalf("parse failed: %v", err)
+	}
+
+	code := Generate(req)
+	expected := "fetch('http://localhost:28139');\n"
+	if code != expected {
+		t.Fatalf("unexpected generated code\nexpected:\n%s\nactual:\n%s", expected, code)
+	}
+}
+
+func TestGenerateUsesFileValueForBinaryFileBody(t *testing.T) {
+	req, err := parser.Parse(`curl -X POST --data-binary @./sample.sparql -H 'Content-type: application/sparql-query' http://localhost:28139/american-art/query`)
+	if err != nil {
+		t.Fatalf("parse failed: %v", err)
+	}
+
+	code := Generate(req)
+	expected := "import { readFile } from 'node:fs/promises';\n\n" +
+		"fetch('http://localhost:28139/american-art/query', {\n" +
+		"  method: 'POST',\n" +
+		"  headers: {\n" +
+		"    'Content-type': 'application/sparql-query'\n" +
+		"  },\n" +
+		"  body: await readFile('./sample.sparql')\n" +
+		"});\n"
+	if code != expected {
+		t.Fatalf("unexpected generated code\nexpected:\n%s\nactual:\n%s", expected, code)
+	}
+}
+
+func TestGenerateUploadFileReadsFromDisk(t *testing.T) {
+	req, err := parser.Parse(`curl http://localhost:28139 --upload-file file.txt`)
+	if err != nil {
+		t.Fatalf("parse failed: %v", err)
+	}
+
+	code := Generate(req)
+	expected := "import { readFile } from 'node:fs/promises';\n\n" +
+		"fetch('http://localhost:28139/file.txt', {\n" +
+		"  method: 'PUT',\n" +
+		"  body: await readFile('file.txt')\n" +
+		"});\n"
+	if code != expected {
+		t.Fatalf("unexpected generated code\nexpected:\n%s\nactual:\n%s", expected, code)
+	}
+}
+
+func TestGenerateMultipartFileReadsFromDisk(t *testing.T) {
+	req, err := parser.Parse(`curl http://localhost:28139/api/2.0/files/content -H "Authorization: Bearer ACCESS_TOKEN" -X POST -F attributes='{"name":"tigers.jpeg", "parent":{"id":"11446498"}}' -F file=@myfile.jpg`)
+	if err != nil {
+		t.Fatalf("parse failed: %v", err)
+	}
+
+	code := Generate(req)
+	expected := "import { readFile } from 'node:fs/promises';\n\n" +
+		"const form = new FormData();\n" +
+		"form.append('attributes', '{\"name\":\"tigers.jpeg\", \"parent\":{\"id\":\"11446498\"}}');\n" +
+		"form.append('file', new File([await readFile('myfile.jpg')], 'myfile.jpg'));\n\n" +
+		"fetch('http://localhost:28139/api/2.0/files/content', {\n" +
+		"  method: 'POST',\n" +
+		"  headers: {\n" +
+		"    'Authorization': 'Bearer ACCESS_TOKEN'\n" +
+		"  },\n" +
+		"  body: form\n" +
+		"});\n"
+	if code != expected {
+		t.Fatalf("unexpected generated code\nexpected:\n%s\nactual:\n%s", expected, code)
+	}
+}
+
+func TestGenerateBasicAuthWithoutUserMatchesFixtureShape(t *testing.T) {
+	req, err := parser.Parse(`curl "http://localhost:28139/" -u ":some_password"`)
+	if err != nil {
+		t.Fatalf("parse failed: %v", err)
+	}
+
+	code := Generate(req)
+	expected := "fetch('http://localhost:28139/', {\n" +
+		"  headers: {\n" +
+		"    'Authorization': 'Basic ' + btoa(':some_password')\n" +
+		"  }\n" +
+		"});\n"
+	if code != expected {
+		t.Fatalf("unexpected generated code\nexpected:\n%s\nactual:\n%s", expected, code)
+	}
+}
+
+func TestGenerateBearerTokenAsAuthorizationHeader(t *testing.T) {
+	req, err := parser.Parse(`curl http://localhost:28139 --oauth2-bearer AAAAAAAAAAAA`)
+	if err != nil {
+		t.Fatalf("parse failed: %v", err)
+	}
+
+	code := Generate(req)
+	expected := "fetch('http://localhost:28139', {\n" +
+		"  headers: {\n" +
+		"    'Authorization': 'Bearer AAAAAAAAAAAA'\n" +
+		"  }\n" +
+		"});\n"
+	if code != expected {
+		t.Fatalf("unexpected generated code\nexpected:\n%s\nactual:\n%s", expected, code)
 	}
 }

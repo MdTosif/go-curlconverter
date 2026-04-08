@@ -1,28 +1,40 @@
 # Go curlconverter
 
-This directory contains a small Go implementation of a `curl` to JavaScript `fetch()` converter.
+This directory contains a Go implementation of a `curl` to JavaScript `fetch()` converter.
 
-It is an MVP inspired by the upstream `curlconverter` JavaScript project in the repository root. It is useful for basic conversions, local experiments, and incremental parity work, but it is not yet a full port of the upstream parser or generators.
+It is a focused Go port inspired by the upstream `curlconverter` JavaScript project in the repository root. The Go code targets a well-defined conversion surface for JavaScript `fetch()` output, with unit tests and fixture-backed parity checks for the supported subset.
 
 ## What it does
 
 - parses a limited subset of `curl`
-- builds a small request model in Go
+- builds a request model in Go
 - generates JavaScript `fetch()` code
-- includes unit tests and a few fixture-backed parity tests against the checked-in upstream project fixtures
+- includes unit tests and fixture-backed parity tests against the checked-in upstream project fixtures
 
 ## Supported flags
 
 The current Go parser supports these options:
 
 - `-X`, `--request`
+- `-I`, `--head`
 - `-G`, `--get`
+- `-x`, `--proxy`
 - `-H`, `--header`
 - `-b`, `--cookie`
+- `-u`, `--user`
+- `--oauth2-bearer`
+- `-U`, `--proxy-user`
+- `-A`, `--user-agent`
+- `-e`, `--referer`
+- `--url`
+- `-T`, `--upload-file`
+- `--digest`
 - `-d`, `--data`
 - `--data-raw`
 - `--data-binary`
 - `--data-ascii`
+- `-F`, `--form`
+- `--form-string`
 - `--json`
 - URL arguments starting with `http://` or `https://`
 
@@ -32,17 +44,30 @@ Current behavior includes:
 - any supported data flag switches the request to `POST` when no explicit method is set
 - empty quoted bodies like `--data-binary ""` are preserved
 - `-b/--cookie` is converted into a `Cookie` header
+- `-u/--user` is converted into an `Authorization` header using browser-style `btoa(...)`
+- `--digest` switches generated JavaScript to `digest-fetch`, matching the upstream JavaScript fixture behavior
+- `-I/--head` maps to `fetch(..., { method: 'HEAD' })`
+- `--url` is accepted as an alternate way to provide the request URL
+- proxy flags are parsed and preserved in the request model
 - repeated data flags are joined with `&`
 - `-G/--get` moves data fields into the query string
+- `-F/--form` and `--form-string` generate `FormData()` for multipart requests
+- file form values like `file=@myfile.jpg` are converted into placeholder `File(...)` values in the generated JavaScript
+- `-T/--upload-file` generates a `PUT` request and real `readFile(...)` body loading code
+- binary file bodies like `--data-binary @file` generate real `readFile(...)` body loading code
+- multipart file parts generate `File([await readFile(...)], ...)` values instead of placeholders
 - `--json` joins multiple JSON fragments, adds `Content-Type` and `Accept`, and generates `JSON.stringify(...)` output when the JSON parses cleanly
+- explicit `application/x-www-form-urlencoded` bodies can be rendered as `new URLSearchParams(...)`
 - when a body exists and no explicit `Content-Type` header is provided, the generator adds `application/x-www-form-urlencoded`
+- browser `fetch()` output intentionally ignores proxy settings, matching the upstream JavaScript fixture behavior
+- line continuations and inline shell comments are handled for common multiline curl snippets
 
 ## Project structure
 
 - `cmd/curlconv`
   Small CLI for converting a curl command to JavaScript.
 - `pkg/parser`
-  Minimal curl parser for the supported subset.
+  Curl parser for the supported subset.
 - `pkg/request`
   Request model used between parsing and code generation.
 - `pkg/generator/javascript`
@@ -119,16 +144,16 @@ fetch('https://example.com/api', {
 });
 ```
 
-## Current limitations
+## Scope
 
-This is still a minimal implementation. It does not yet support much of the upstream project's behavior, including:
+The Go implementation is intentionally focused on one output target: JavaScript `fetch()`.
 
-- complex shell parsing and escaping edge cases
-- multipart form handling
-- file uploads
-- proxy and auth options beyond raw cookie handling
-- advanced JavaScript output shaping such as `URLSearchParams`
-- the full upstream language/generator matrix
+It does not aim to be a full cross-language port of the upstream project, but within that scope it now supports:
+
+- common curl request parsing for headers, cookies, auth, JSON, forms, uploads, and query-string generation
+- real file-backed request bodies and multipart file reads in generated JavaScript
+- bearer, basic, and digest authentication handling
+- stable, tested JavaScript output for the supported fixture set
 
 ## Module path
 
