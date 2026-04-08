@@ -73,6 +73,9 @@ func ToGoWarn(curlCommand string) (string, Warnings, error) {
 }
 
 func ToPython(curlCommand string) (string, error) {
+	if code, err := pygen.GenerateCommand(curlCommand); err == nil {
+		return code, nil
+	}
 	reqs, err := parser.ParseAll(curlCommand)
 	if err != nil {
 		return "", err

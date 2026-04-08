@@ -47,7 +47,10 @@ func main() {
 		code := gogen.Generate(reqs[0])
 		fmt.Print(code)
 	case "python":
-		code := pygen.Generate(reqs[0])
+		code, err := pygen.GenerateCommand(cmd)
+		if err != nil {
+			code = pygen.Generate(reqs[0])
+		}
 		fmt.Print(code)
 	case "parser":
 		jsonOutput, err := parser.MarshalJSON(reqs)

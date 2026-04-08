@@ -11,7 +11,7 @@ import (
 func TestGenerateMatchesGoFixtures(t *testing.T) {
 	t.Parallel()
 
-	entries, err := os.ReadDir(filepath.Join("..", "..", "..", "..", "test", "fixtures", "go"))
+	entries, err := os.ReadDir(filepath.Join("..", "..", "..", "test", "fixtures", "go"))
 	if err != nil {
 		t.Fatalf("read go fixtures: %v", err)
 	}
@@ -25,8 +25,8 @@ func TestGenerateMatchesGoFixtures(t *testing.T) {
 			t.Parallel()
 
 			base := entry.Name()[:len(entry.Name())-len(".go")]
-			cmdPath := filepath.Join("..", "..", "..", "..", "test", "fixtures", "curl_commands", base+".sh")
-			expectedPath := filepath.Join("..", "..", "..", "..", "test", "fixtures", "go", entry.Name())
+			cmdPath := filepath.Join("..", "..", "..", "test", "fixtures", "curl_commands", base+".sh")
+			expectedPath := filepath.Join("..", "..", "..", "test", "fixtures", "go", entry.Name())
 
 			cmd, err := os.ReadFile(cmdPath)
 			if err != nil {

@@ -29,8 +29,8 @@ func TestGenerateMatchesSelectedAxiosFixtures(t *testing.T) {
 		tc := tc
 		t.Run(tc.expectedFile, func(t *testing.T) {
 			t.Parallel()
-			cmdPath := filepath.Join("..", "..", "..", "..", "test", "fixtures", "curl_commands", tc.commandFile)
-			expectedPath := filepath.Join("..", "..", "..", "..", "test", "fixtures", "node-axios", tc.expectedFile)
+			cmdPath := filepath.Join("..", "..", "..", "test", "fixtures", "curl_commands", tc.commandFile)
+			expectedPath := filepath.Join("..", "..", "..", "test", "fixtures", "node-axios", tc.expectedFile)
 
 			cmd, err := os.ReadFile(cmdPath)
 			if err != nil {

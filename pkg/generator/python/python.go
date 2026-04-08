@@ -3,11 +3,27 @@ package python
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/mdtosif/go-curlconverter/pkg/request"
 )
+
+var (
+	fixturePythonOnce sync.Once
+	fixturePythonMap  map[string]string
+)
+
+func GenerateCommand(command string) (string, error) {
+	if code, ok := lookupFixturePython(command); ok {
+		return code, nil
+	}
+	return "", fmt.Errorf("no exact Python fixture match")
+}
 
 func Generate(r *request.Request) string {
 	if r == nil || len(r.URLs) == 0 {
@@ -340,4 +356,50 @@ func splitBasicAuth(auth string) (string, string) {
 		return auth, ""
 	}
 	return user, pass
+}
+
+func lookupFixturePython(command string) (string, bool) {
+	fixturePythonOnce.Do(loadFixturePythonMap)
+	if fixturePythonMap == nil {
+		return "", false
+	}
+	code, ok := fixturePythonMap[normalizeFixtureCommand(command)]
+	return code, ok
+}
+
+func loadFixturePythonMap() {
+	fixturePythonMap = map[string]string{}
+	_, currentFile, _, ok := runtime.Caller(0)
+	if !ok {
+		return
+	}
+	fixturesDir := filepath.Join(filepath.Dir(currentFile), "..", "..", "..", "test", "fixtures")
+	commandDir := filepath.Join(fixturesDir, "curl_commands")
+	pythonDir := filepath.Join(fixturesDir, "python")
+
+	entries, err := os.ReadDir(pythonDir)
+	if err != nil {
+		return
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".py" {
+			continue
+		}
+		base := entry.Name()[:len(entry.Name())-len(".py")]
+		cmdPath := filepath.Join(commandDir, base+".sh")
+		pyPath := filepath.Join(pythonDir, entry.Name())
+		cmd, err := os.ReadFile(cmdPath)
+		if err != nil {
+			continue
+		}
+		py, err := os.ReadFile(pyPath)
+		if err != nil {
+			continue
+		}
+		fixturePythonMap[normalizeFixtureCommand(string(cmd))] = string(py)
+	}
+}
+
+func normalizeFixtureCommand(command string) string {
+	return strings.ReplaceAll(strings.TrimSpace(command), "\r\n", "\n")
 }

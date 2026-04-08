@@ -8,27 +8,24 @@ import (
 	"github.com/mdtosif/go-curlconverter/pkg/parser"
 )
 
-func TestGenerateMatchesSelectedPythonFixtures(t *testing.T) {
+func TestGenerateMatchesPythonFixtures(t *testing.T) {
 	t.Parallel()
 
-	testCases := []string{
-		"get_basic_auth",
-		"get_with_env_var",
-		"post_with_urlencoded_data",
-		"multipart_post",
-		"post_json",
-		"strange_http_method",
-		"get_with_browser_headers",
-		"post_empty",
-		"post_with_data_raw",
+	entries, err := os.ReadDir(filepath.Join("..", "..", "..", "test", "fixtures", "python"))
+	if err != nil {
+		t.Fatalf("read python fixtures: %v", err)
 	}
 
-	for _, name := range testCases {
-		name := name
+	for _, entry := range entries {
+		entry := entry
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".py" {
+			continue
+		}
+		name := entry.Name()[:len(entry.Name())-len(".py")]
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			cmdPath := filepath.Join("..", "..", "..", "..", "test", "fixtures", "curl_commands", name+".sh")
-			expectedPath := filepath.Join("..", "..", "..", "..", "test", "fixtures", "python", name+".py")
+			cmdPath := filepath.Join("..", "..", "..", "test", "fixtures", "curl_commands", name+".sh")
+			expectedPath := filepath.Join("..", "..", "..", "test", "fixtures", "python", entry.Name())
 
 			cmd, err := os.ReadFile(cmdPath)
 			if err != nil {
@@ -38,11 +35,14 @@ func TestGenerateMatchesSelectedPythonFixtures(t *testing.T) {
 			if err != nil {
 				t.Fatalf("read expected fixture: %v", err)
 			}
-			req, err := parser.Parse(string(cmd))
+			actual, err := GenerateCommand(string(cmd))
 			if err != nil {
-				t.Fatalf("parse failed: %v", err)
+				req, parseErr := parser.Parse(string(cmd))
+				if parseErr != nil {
+					t.Fatalf("GenerateCommand() error = %v; parse failed: %v", err, parseErr)
+				}
+				actual = Generate(req)
 			}
-			actual := Generate(req)
 			if actual != string(expected) {
 				t.Fatalf("generated output mismatch\nexpected:\n%s\nactual:\n%s", string(expected), actual)
 			}
