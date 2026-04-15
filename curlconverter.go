@@ -10,6 +10,9 @@ import (
 	axgen "github.com/mdtosif/go-curlconverter/pkg/generator/nodeaxios"
 	gotgen "github.com/mdtosif/go-curlconverter/pkg/generator/nodegot"
 	httpgen "github.com/mdtosif/go-curlconverter/pkg/generator/nodehttp"
+	kygen "github.com/mdtosif/go-curlconverter/pkg/generator/nodeky"
+	reqgen "github.com/mdtosif/go-curlconverter/pkg/generator/noderequest"
+	superagentgen "github.com/mdtosif/go-curlconverter/pkg/generator/nodesuperagent"
 	pygen "github.com/mdtosif/go-curlconverter/pkg/generator/python"
 	"github.com/mdtosif/go-curlconverter/pkg/parser"
 	"github.com/mdtosif/go-curlconverter/pkg/request"
@@ -21,7 +24,7 @@ type Warnings = parser.Warnings
 var ErrNoRequests = errors.New("curlconverter: no requests parsed from input")
 
 func SupportedLanguages() []string {
-	return []string{"javascript", "javascript-jquery", "javascript-xhr", "node-http", "node-got", "node-axios", "go", "python", "parser"}
+	return []string{"javascript", "javascript-jquery", "javascript-xhr", "node-http", "node-got", "node-ky", "node-request", "node-axios", "node-superagent", "go", "python", "parser"}
 }
 
 func Parse(curlCommand string) ([]*request.Request, error) {
@@ -442,4 +445,124 @@ func ToNodeGotWarn(curlCommand string) (string, Warnings, error) {
 		return "", warnings, err
 	}
 	return GenerateNodeGot(req), warnings, nil
+}
+
+func GenerateNodeKy(req *request.Request) string {
+	return kygen.Generate(req)
+}
+
+func ToNodeKy(curlCommand string) (string, error) {
+	reqs, err := parser.ParseAll(curlCommand)
+	if err != nil {
+		return "", err
+	}
+	req, _, err := getFirstRequest(reqs, nil, support{})
+	if err != nil {
+		return "", err
+	}
+	return GenerateNodeKy(req), nil
+}
+
+func ToNodeKyArgs(args []string) (string, error) {
+	reqs, err := parser.ParseAllArgs(args)
+	if err != nil {
+		return "", err
+	}
+	req, _, err := getFirstRequest(reqs, nil, support{})
+	if err != nil {
+		return "", err
+	}
+	return GenerateNodeKy(req), nil
+}
+
+func ToNodeKyWarn(curlCommand string) (string, Warnings, error) {
+	reqs, warnings, err := parser.ParseAllWarn(curlCommand)
+	if err != nil {
+		return "", warnings, err
+	}
+	req, warnings, err := getFirstRequest(reqs, warnings, support{})
+	if err != nil {
+		return "", warnings, err
+	}
+	return GenerateNodeKy(req), warnings, nil
+}
+
+func GenerateNodeRequest(req *request.Request) string {
+	return reqgen.Generate(req)
+}
+
+func ToNodeRequest(curlCommand string) (string, error) {
+	reqs, err := parser.ParseAll(curlCommand)
+	if err != nil {
+		return "", err
+	}
+	req, _, err := getFirstRequest(reqs, nil, support{})
+	if err != nil {
+		return "", err
+	}
+	return GenerateNodeRequest(req), nil
+}
+
+func ToNodeRequestArgs(args []string) (string, error) {
+	reqs, err := parser.ParseAllArgs(args)
+	if err != nil {
+		return "", err
+	}
+	req, _, err := getFirstRequest(reqs, nil, support{})
+	if err != nil {
+		return "", err
+	}
+	return GenerateNodeRequest(req), nil
+}
+
+func ToNodeRequestWarn(curlCommand string) (string, Warnings, error) {
+	reqs, warnings, err := parser.ParseAllWarn(curlCommand)
+	if err != nil {
+		return "", warnings, err
+	}
+	req, warnings, err := getFirstRequest(reqs, warnings, support{})
+	if err != nil {
+		return "", warnings, err
+	}
+	return GenerateNodeRequest(req), warnings, nil
+}
+
+func GenerateNodeSuperagent(req *request.Request) string {
+	return superagentgen.Generate(req)
+}
+
+func ToNodeSuperagent(curlCommand string) (string, error) {
+	reqs, err := parser.ParseAll(curlCommand)
+	if err != nil {
+		return "", err
+	}
+	req, _, err := getFirstRequest(reqs, nil, support{})
+	if err != nil {
+		return "", err
+	}
+	return GenerateNodeSuperagent(req), nil
+}
+
+func ToNodeSuperagentArgs(args []string) (string, error) {
+	reqs, err := parser.ParseAllArgs(args)
+	if err != nil {
+		return "", err
+	}
+	req, _, err := getFirstRequest(reqs, nil, support{})
+	if err != nil {
+		return "", err
+	}
+	return GenerateNodeSuperagent(req), nil
+}
+
+func ToNodeSuperagentWarn(curlCommand string) (string, Warnings, error) {
+	reqs, warnings, err := parser.ParseAllWarn(curlCommand)
+	if err != nil {
+		return "", warnings, err
+	}
+	req, warnings, err := getFirstRequest(reqs, warnings, support{})
+	if err != nil {
+		return "", warnings, err
+	}
+	return GenerateNodeSuperagent(req), warnings, nil
 }
