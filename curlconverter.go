@@ -8,6 +8,8 @@ import (
 	jsjquerygen "github.com/mdtosif/go-curlconverter/pkg/generator/javascriptjquery"
 	jsxhrgen "github.com/mdtosif/go-curlconverter/pkg/generator/javascriptxhr"
 	axgen "github.com/mdtosif/go-curlconverter/pkg/generator/nodeaxios"
+	gotgen "github.com/mdtosif/go-curlconverter/pkg/generator/nodegot"
+	httpgen "github.com/mdtosif/go-curlconverter/pkg/generator/nodehttp"
 	pygen "github.com/mdtosif/go-curlconverter/pkg/generator/python"
 	"github.com/mdtosif/go-curlconverter/pkg/parser"
 	"github.com/mdtosif/go-curlconverter/pkg/request"
@@ -19,7 +21,7 @@ type Warnings = parser.Warnings
 var ErrNoRequests = errors.New("curlconverter: no requests parsed from input")
 
 func SupportedLanguages() []string {
-	return []string{"javascript", "javascript-jquery", "javascript-xhr", "node-axios", "go", "python", "parser"}
+	return []string{"javascript", "javascript-jquery", "javascript-xhr", "node-http", "node-got", "node-axios", "go", "python", "parser"}
 }
 
 func Parse(curlCommand string) ([]*request.Request, error) {
@@ -360,4 +362,84 @@ func ToJavaScriptJQueryWarn(curlCommand string) (string, Warnings, error) {
 		return "", warnings, err
 	}
 	return GenerateJavaScriptJQuery(req), warnings, nil
+}
+
+func GenerateNodeHTTP(req *request.Request) string {
+	return httpgen.Generate(req)
+}
+
+func ToNodeHTTP(curlCommand string) (string, error) {
+	reqs, err := parser.ParseAll(curlCommand)
+	if err != nil {
+		return "", err
+	}
+	req, _, err := getFirstRequest(reqs, nil, support{})
+	if err != nil {
+		return "", err
+	}
+	return GenerateNodeHTTP(req), nil
+}
+
+func ToNodeHTTPArgs(args []string) (string, error) {
+	reqs, err := parser.ParseAllArgs(args)
+	if err != nil {
+		return "", err
+	}
+	req, _, err := getFirstRequest(reqs, nil, support{})
+	if err != nil {
+		return "", err
+	}
+	return GenerateNodeHTTP(req), nil
+}
+
+func ToNodeHTTPWarn(curlCommand string) (string, Warnings, error) {
+	reqs, warnings, err := parser.ParseAllWarn(curlCommand)
+	if err != nil {
+		return "", warnings, err
+	}
+	req, warnings, err := getFirstRequest(reqs, warnings, support{})
+	if err != nil {
+		return "", warnings, err
+	}
+	return GenerateNodeHTTP(req), warnings, nil
+}
+
+func GenerateNodeGot(req *request.Request) string {
+	return gotgen.Generate(req)
+}
+
+func ToNodeGot(curlCommand string) (string, error) {
+	reqs, err := parser.ParseAll(curlCommand)
+	if err != nil {
+		return "", err
+	}
+	req, _, err := getFirstRequest(reqs, nil, support{})
+	if err != nil {
+		return "", err
+	}
+	return GenerateNodeGot(req), nil
+}
+
+func ToNodeGotArgs(args []string) (string, error) {
+	reqs, err := parser.ParseAllArgs(args)
+	if err != nil {
+		return "", err
+	}
+	req, _, err := getFirstRequest(reqs, nil, support{})
+	if err != nil {
+		return "", err
+	}
+	return GenerateNodeGot(req), nil
+}
+
+func ToNodeGotWarn(curlCommand string) (string, Warnings, error) {
+	reqs, warnings, err := parser.ParseAllWarn(curlCommand)
+	if err != nil {
+		return "", warnings, err
+	}
+	req, warnings, err := getFirstRequest(reqs, warnings, support{})
+	if err != nil {
+		return "", warnings, err
+	}
+	return GenerateNodeGot(req), warnings, nil
 }
