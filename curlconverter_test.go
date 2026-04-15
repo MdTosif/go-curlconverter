@@ -29,8 +29,8 @@ func TestPublicAPI(t *testing.T) {
 		t.Fatal("expected parser JSON output")
 	}
 
-	if got := SupportedLanguages(); len(got) != 12 {
-		t.Fatalf("SupportedLanguages() length = %d, want 12", len(got))
+	if got := SupportedLanguages(); len(got) != 15 {
+		t.Fatalf("SupportedLanguages() length = %d, want 15", len(got))
 	}
 
 	code, warnings, err := ToJavaScriptWarn(`curl http://localhost:28139`)

@@ -4,9 +4,12 @@ import (
 	"errors"
 
 	gogen "github.com/mdtosif/go-curlconverter/pkg/generator/golang"
+	hargen "github.com/mdtosif/go-curlconverter/pkg/generator/har"
+	httplibgen "github.com/mdtosif/go-curlconverter/pkg/generator/http"
 	jsgen "github.com/mdtosif/go-curlconverter/pkg/generator/javascript"
 	jsjquerygen "github.com/mdtosif/go-curlconverter/pkg/generator/javascriptjquery"
 	jsxhrgen "github.com/mdtosif/go-curlconverter/pkg/generator/javascriptxhr"
+	jsongen "github.com/mdtosif/go-curlconverter/pkg/generator/json"
 	axgen "github.com/mdtosif/go-curlconverter/pkg/generator/nodeaxios"
 	gotgen "github.com/mdtosif/go-curlconverter/pkg/generator/nodegot"
 	httpgen "github.com/mdtosif/go-curlconverter/pkg/generator/nodehttp"
@@ -24,7 +27,7 @@ type Warnings = parser.Warnings
 var ErrNoRequests = errors.New("curlconverter: no requests parsed from input")
 
 func SupportedLanguages() []string {
-	return []string{"javascript", "javascript-jquery", "javascript-xhr", "node-http", "node-got", "node-ky", "node-request", "node-axios", "node-superagent", "go", "python", "parser"}
+	return []string{"javascript", "javascript-jquery", "javascript-xhr", "node-http", "node-got", "node-ky", "node-request", "node-axios", "node-superagent", "go", "python", "json", "har", "http", "parser"}
 }
 
 func Parse(curlCommand string) ([]*request.Request, error) {
@@ -368,7 +371,7 @@ func ToJavaScriptJQueryWarn(curlCommand string) (string, Warnings, error) {
 }
 
 func GenerateNodeHTTP(req *request.Request) string {
-	return httpgen.Generate(req)
+	return httplibgen.Generate(req)
 }
 
 func ToNodeHTTP(curlCommand string) (string, error) {
@@ -565,4 +568,124 @@ func ToNodeSuperagentWarn(curlCommand string) (string, Warnings, error) {
 		return "", warnings, err
 	}
 	return GenerateNodeSuperagent(req), warnings, nil
+}
+
+func GenerateJSON(req *request.Request) string {
+	return jsongen.Generate(req)
+}
+
+func ToJSON(curlCommand string) (string, error) {
+	reqs, err := parser.ParseAll(curlCommand)
+	if err != nil {
+		return "", err
+	}
+	req, _, err := getFirstRequest(reqs, nil, support{})
+	if err != nil {
+		return "", err
+	}
+	return GenerateJSON(req), nil
+}
+
+func ToJSONArgs(args []string) (string, error) {
+	reqs, err := parser.ParseAllArgs(args)
+	if err != nil {
+		return "", err
+	}
+	req, _, err := getFirstRequest(reqs, nil, support{})
+	if err != nil {
+		return "", err
+	}
+	return GenerateJSON(req), nil
+}
+
+func ToJSONWarn(curlCommand string) (string, Warnings, error) {
+	reqs, warnings, err := parser.ParseAllWarn(curlCommand)
+	if err != nil {
+		return "", warnings, err
+	}
+	req, warnings, err := getFirstRequest(reqs, warnings, support{})
+	if err != nil {
+		return "", warnings, err
+	}
+	return GenerateJSON(req), warnings, nil
+}
+
+func GenerateHAR(req *request.Request) string {
+	return hargen.Generate(req)
+}
+
+func ToHAR(curlCommand string) (string, error) {
+	reqs, err := parser.ParseAll(curlCommand)
+	if err != nil {
+		return "", err
+	}
+	req, _, err := getFirstRequest(reqs, nil, support{})
+	if err != nil {
+		return "", err
+	}
+	return GenerateHAR(req), nil
+}
+
+func ToHARArgs(args []string) (string, error) {
+	reqs, err := parser.ParseAllArgs(args)
+	if err != nil {
+		return "", err
+	}
+	req, _, err := getFirstRequest(reqs, nil, support{})
+	if err != nil {
+		return "", err
+	}
+	return GenerateHAR(req), nil
+}
+
+func ToHARWarn(curlCommand string) (string, Warnings, error) {
+	reqs, warnings, err := parser.ParseAllWarn(curlCommand)
+	if err != nil {
+		return "", warnings, err
+	}
+	req, warnings, err := getFirstRequest(reqs, warnings, support{})
+	if err != nil {
+		return "", warnings, err
+	}
+	return GenerateHAR(req), warnings, nil
+}
+
+func GenerateHTTP(req *request.Request) string {
+	return httpgen.Generate(req)
+}
+
+func ToHTTP(curlCommand string) (string, error) {
+	reqs, err := parser.ParseAll(curlCommand)
+	if err != nil {
+		return "", err
+	}
+	req, _, err := getFirstRequest(reqs, nil, support{})
+	if err != nil {
+		return "", err
+	}
+	return GenerateHTTP(req), nil
+}
+
+func ToHTTPArgs(args []string) (string, error) {
+	reqs, err := parser.ParseAllArgs(args)
+	if err != nil {
+		return "", err
+	}
+	req, _, err := getFirstRequest(reqs, nil, support{})
+	if err != nil {
+		return "", err
+	}
+	return GenerateHTTP(req), nil
+}
+
+func ToHTTPWarn(curlCommand string) (string, Warnings, error) {
+	reqs, warnings, err := parser.ParseAllWarn(curlCommand)
+	if err != nil {
+		return "", warnings, err
+	}
+	req, warnings, err := getFirstRequest(reqs, warnings, support{})
+	if err != nil {
+		return "", warnings, err
+	}
+	return GenerateHTTP(req), warnings, nil
 }
