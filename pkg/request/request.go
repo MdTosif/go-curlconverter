@@ -53,6 +53,7 @@ type Request struct {
 	ProxyHeaders  HeaderSet    `json:"proxyHeaders"`
 	Cookies       [][2]string  `json:"cookies,omitempty"`
 	CookieFiles   []string     `json:"cookieFiles,omitempty"`
+	CookieJar     string       `json:"cookieJar,omitempty"`
 	Compressed    bool         `json:"compressed,omitempty"`
 	Data          string       `json:"data,omitempty"`
 	DataArray     []string     `json:"dataArray,omitempty"`
@@ -73,4 +74,92 @@ type Request struct {
 	JSONBody        bool              `json:"-"`
 	Body            string            `json:"-"`
 	AutoContentType bool              `json:"-"`
+
+	// Redirect options
+	FollowRedirects        bool   `json:"-"`
+	MaxRedirects           string `json:"-"`
+	FollowRedirectsTrusted bool   `json:"-"`
+	Post301                bool   `json:"-"`
+	Post302                bool   `json:"-"`
+	Post303                bool   `json:"-"`
+
+	// Timeout options
+	ConnectTimeout string `json:"-"`
+	MaxTime        string `json:"-"`
+
+	// TLS/SSL options
+	Insecure     bool   `json:"-"`
+	CACert       string `json:"-"`
+	Cert         string `json:"-"`
+	Key          string `json:"-"`
+	CertType     string `json:"-"`
+	KeyType      string `json:"-"`
+	Pass         string `json:"-"`
+	CAPath       string `json:"-"`
+	CRLFile      string `json:"-"`
+	PinnedPubKey string `json:"-"`
+
+	// Transfer options
+	Range      string `json:"-"`
+	ContinueAt string `json:"-"`
+	SpeedLimit string `json:"-"`
+	SpeedTime  string `json:"-"`
+
+	// Retry options
+	Retry        string `json:"-"`
+	RetryDelay   string `json:"-"`
+	RetryMaxTime string `json:"-"`
+
+	// Output options
+	Output        string `json:"-"`
+	RemoteName    bool   `json:"-"`
+	RemoteNameAll bool   `json:"-"`
+	Clobber       bool   `json:"-"`
+	RemoteTime    bool   `json:"-"`
+	Include       bool   `json:"-"`
+
+	// Protocol options
+	HTTP10              bool `json:"-"`
+	HTTP11              bool `json:"-"`
+	HTTP2               bool `json:"-"`
+	HTTP3               bool `json:"-"`
+	HTTP2PriorKnowledge bool `json:"-"`
+	IPv4                bool `json:"-"`
+	IPv6                bool `json:"-"`
+
+	// Proxy options
+	ProxyType      string `json:"-"`
+	ProxyTunnel    bool   `json:"-"`
+	NoProxy        string `json:"-"`
+	PreProxy       string `json:"-"`
+	ProxyCACert    string `json:"-"`
+	ProxyCAPath    string `json:"-"`
+	ProxyCert      string `json:"-"`
+	ProxyCertType  string `json:"-"`
+	ProxyKey       string `json:"-"`
+	ProxyKeyType   string `json:"-"`
+	ProxyPass      string `json:"-"`
+	ProxyInsecure  bool   `json:"-"`
+	ProxyDigest    bool   `json:"-"`
+	ProxyBasic     bool   `json:"-"`
+	ProxyNegotiate bool   `json:"-"`
+	ProxyNtlm      bool   `json:"-"`
+
+	// SOCKS proxy options
+	SOCKS4         string `json:"-"`
+	SOCKS4a        string `json:"-"`
+	SOCKS5         string `json:"-"`
+	SOCKS5Hostname string `json:"-"`
+
+	// Misc
+	Verbose             bool   `json:"-"`
+	Silent              bool   `json:"-"`
+	Fail                bool   `json:"-"`
+	LocationTrusted     bool   `json:"-"`
+	IgnoreContentLength bool   `json:"-"`
+	Globoff             bool   `json:"-"`
+	Netrc               string `json:"-"`
+	NetrcFile           string `json:"-"`
+	Stdin               bool   `json:"-"`
+	StdinFile           string `json:"-"`
 }

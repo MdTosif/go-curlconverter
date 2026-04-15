@@ -5,6 +5,8 @@ import (
 
 	gogen "github.com/mdtosif/go-curlconverter/pkg/generator/golang"
 	jsgen "github.com/mdtosif/go-curlconverter/pkg/generator/javascript"
+	jsjquerygen "github.com/mdtosif/go-curlconverter/pkg/generator/javascriptjquery"
+	jsxhrgen "github.com/mdtosif/go-curlconverter/pkg/generator/javascriptxhr"
 	axgen "github.com/mdtosif/go-curlconverter/pkg/generator/nodeaxios"
 	pygen "github.com/mdtosif/go-curlconverter/pkg/generator/python"
 	"github.com/mdtosif/go-curlconverter/pkg/parser"
@@ -17,7 +19,7 @@ type Warnings = parser.Warnings
 var ErrNoRequests = errors.New("curlconverter: no requests parsed from input")
 
 func SupportedLanguages() []string {
-	return []string{"javascript", "node-axios", "go", "python", "parser"}
+	return []string{"javascript", "javascript-jquery", "javascript-xhr", "node-axios", "go", "python", "parser"}
 }
 
 func Parse(curlCommand string) ([]*request.Request, error) {
@@ -278,4 +280,84 @@ func ToPythonWarn(curlCommand string) (string, Warnings, error) {
 		return code, warnings, nil
 	}
 	return GeneratePython(req), warnings, nil
+}
+
+func GenerateJavaScriptXHR(req *request.Request) string {
+	return jsxhrgen.Generate(req)
+}
+
+func ToJavaScriptXHR(curlCommand string) (string, error) {
+	reqs, err := parser.ParseAll(curlCommand)
+	if err != nil {
+		return "", err
+	}
+	req, _, err := getFirstRequest(reqs, nil, support{})
+	if err != nil {
+		return "", err
+	}
+	return GenerateJavaScriptXHR(req), nil
+}
+
+func ToJavaScriptXHRArgs(args []string) (string, error) {
+	reqs, err := parser.ParseAllArgs(args)
+	if err != nil {
+		return "", err
+	}
+	req, _, err := getFirstRequest(reqs, nil, support{})
+	if err != nil {
+		return "", err
+	}
+	return GenerateJavaScriptXHR(req), nil
+}
+
+func ToJavaScriptXHRWarn(curlCommand string) (string, Warnings, error) {
+	reqs, warnings, err := parser.ParseAllWarn(curlCommand)
+	if err != nil {
+		return "", warnings, err
+	}
+	req, warnings, err := getFirstRequest(reqs, warnings, support{})
+	if err != nil {
+		return "", warnings, err
+	}
+	return GenerateJavaScriptXHR(req), warnings, nil
+}
+
+func GenerateJavaScriptJQuery(req *request.Request) string {
+	return jsjquerygen.Generate(req)
+}
+
+func ToJavaScriptJQuery(curlCommand string) (string, error) {
+	reqs, err := parser.ParseAll(curlCommand)
+	if err != nil {
+		return "", err
+	}
+	req, _, err := getFirstRequest(reqs, nil, support{})
+	if err != nil {
+		return "", err
+	}
+	return GenerateJavaScriptJQuery(req), nil
+}
+
+func ToJavaScriptJQueryArgs(args []string) (string, error) {
+	reqs, err := parser.ParseAllArgs(args)
+	if err != nil {
+		return "", err
+	}
+	req, _, err := getFirstRequest(reqs, nil, support{})
+	if err != nil {
+		return "", err
+	}
+	return GenerateJavaScriptJQuery(req), nil
+}
+
+func ToJavaScriptJQueryWarn(curlCommand string) (string, Warnings, error) {
+	reqs, warnings, err := parser.ParseAllWarn(curlCommand)
+	if err != nil {
+		return "", warnings, err
+	}
+	req, warnings, err := getFirstRequest(reqs, warnings, support{})
+	if err != nil {
+		return "", warnings, err
+	}
+	return GenerateJavaScriptJQuery(req), warnings, nil
 }

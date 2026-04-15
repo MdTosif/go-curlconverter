@@ -49,7 +49,7 @@ func max(a, b int) int {
 	return b
 }
 
-func scanShellWarnings(source string) Warnings {
+func scanImproperLineContinuationWarnings(source string) Warnings {
 	var warnings Warnings
 	inSingle, inDouble, esc := false, false, false
 	canStartComment := true
@@ -57,7 +57,6 @@ func scanShellWarnings(source string) Warnings {
 
 	for i := 0; i < len(source); i++ {
 		ch := source[i]
-
 		if commentLine {
 			if ch == '\n' {
 				commentLine = false
@@ -108,157 +107,9 @@ func scanShellWarnings(source string) Warnings {
 			canStartComment = true
 			continue
 		}
-		if !inSingle && ch == '`' {
-			end := findBacktickEnd(source, i+1)
-			warnings = append(warnings, Warning{
-				"expansion",
-				"found command substitution expression\n" + underlineRange(source, i, end),
-			})
-			if end > i {
-				i = end - 1
-			}
-			canStartComment = false
-			continue
-		}
-		if !inSingle && ch == '$' && i+1 < len(source) {
-			next := source[i+1]
-			switch {
-			case next == '{':
-				end := findClosingDelimiter(source, i+2, '{', '}')
-				warnings = append(warnings, Warning{
-					"expansion",
-					"found expansion expression\n" + underlineRange(source, i, end),
-				})
-				if end > i {
-					i = end - 1
-				}
-			case next == '(':
-				end := findClosingDelimiter(source, i+2, '(', ')')
-				warnings = append(warnings, Warning{
-					"expansion",
-					"found command substitution expression\n" + underlineRange(source, i, end),
-				})
-				if end > i {
-					i = end - 1
-				}
-			case isSpecialVariableChar(next):
-				warnings = append(warnings, Warning{
-					"expansion",
-					"found environment variable\n" + underlineRange(source, i, i+2),
-				})
-				warnings = append(warnings, Warning{
-					"special_variable_name",
-					source[i:i+2] + " is a special Bash variable\n" + underlineRange(source, i+1, i+2),
-				})
-				i++
-			case isVariableStart(next):
-				end := i + 2
-				for end < len(source) && isVariablePart(source[end]) {
-					end++
-				}
-				warnings = append(warnings, Warning{
-					"expansion",
-					"found environment variable\n" + underlineRange(source, i, end),
-				})
-				i = end - 1
-			}
-			canStartComment = false
-			continue
-		}
-		if !inSingle && !inDouble && ch == '&' {
-			if i+1 < len(source) && source[i+1] == '&' {
-				// handled as part of the command boundary warnings elsewhere
-			} else {
-				warnings = append(warnings, Warning{
-					"background",
-					"found background operator\n" + underlineRange(source, i, i+1),
-				})
-				canStartComment = false
-				continue
-			}
-		}
-		if !inSingle && !inDouble && ch == '|' {
-			end := i + 1
-			if end < len(source) && source[end] == '|' {
-				end++
-			}
-			warnings = append(warnings, Warning{
-				"pipeline",
-				"found pipeline operator\n" + underlineRange(source, i, end),
-			})
-			i = end - 1
-			canStartComment = false
-			continue
-		}
-		if !inSingle && !inDouble && (ch == '>' || ch == '<') {
-			end := i + 1
-			for end < len(source) && source[end] == ch {
-				end++
-			}
-			warnings = append(warnings, Warning{
-				"redirect",
-				"found shell redirection operator\n" + underlineRange(source, i, end),
-			})
-			i = end - 1
-			canStartComment = false
-			continue
-		}
-
 		canStartComment = false
 	}
-
 	return warnings
-}
-
-func findBacktickEnd(source string, start int) int {
-	for i := start; i < len(source); i++ {
-		if source[i] == '\\' {
-			i++
-			continue
-		}
-		if source[i] == '`' {
-			return i + 1
-		}
-	}
-	return len(source)
-}
-
-func findClosingDelimiter(source string, start int, open, close byte) int {
-	depth := 1
-	inSingle, inDouble, esc := false, false, false
-	for i := start; i < len(source); i++ {
-		ch := source[i]
-		if esc {
-			esc = false
-			continue
-		}
-		if ch == '\\' && !inSingle {
-			esc = true
-			continue
-		}
-		if ch == '\'' && !inDouble {
-			inSingle = !inSingle
-			continue
-		}
-		if ch == '"' && !inSingle {
-			inDouble = !inDouble
-			continue
-		}
-		if inSingle || inDouble {
-			continue
-		}
-		if ch == open {
-			depth++
-			continue
-		}
-		if ch == close {
-			depth--
-			if depth == 0 {
-				return i + 1
-			}
-		}
-	}
-	return len(source)
 }
 
 func isSpecialVariableChar(ch byte) bool {
@@ -268,16 +119,6 @@ func isSpecialVariableChar(ch byte) bool {
 	default:
 		return false
 	}
-}
-
-func isVariableStart(ch byte) bool {
-	return ch == '_' ||
-		(ch >= 'a' && ch <= 'z') ||
-		(ch >= 'A' && ch <= 'Z')
-}
-
-func isVariablePart(ch byte) bool {
-	return isVariableStart(ch) || (ch >= '0' && ch <= '9')
 }
 
 func isImproperLineContinuation(source string, idx int) bool {
