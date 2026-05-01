@@ -382,6 +382,7 @@ func parseOperation(toks []string) (*request.Request, error) {
 	appendQuery := false
 	explicitMethod := false
 	pendingReferer := ""
+	var pendingUserAgent *request.Header
 	lastDataFlag := ""
 
 	for i := 0; i < len(toks); i++ {
@@ -451,7 +452,7 @@ func parseOperation(toks []string) (*request.Request, error) {
 			if t == "--user-agent" {
 				headerName = "user-agent"
 			}
-			setHeader(r, headerName, toks[i+1])
+			pendingUserAgent = &request.Header{Key: headerName, Value: toks[i+1]}
 			i++
 			continue
 		case "-e", "--referer":
@@ -646,6 +647,12 @@ func parseOperation(toks []string) (*request.Request, error) {
 		case "--post303":
 			r.Post303 = true
 			continue
+		case "--trace-ascii":
+			if i+1 >= len(toks) {
+				return nil, errors.New("missing argument for --trace-ascii")
+			}
+			i++
+			continue
 		case "-4", "--ipv4":
 			r.IPv4 = true
 			continue
@@ -768,7 +775,7 @@ func parseOperation(toks []string) (*request.Request, error) {
 				v := strings.TrimSpace(h[idx+1:])
 				setHeader(r, k, v)
 			} else {
-				setHeader(r, h, "")
+				setHeader(r, strings.TrimSuffix(h, ";"), "")
 			}
 			i++
 			continue
@@ -802,6 +809,10 @@ func parseOperation(toks []string) (*request.Request, error) {
 				r.BodyFile = stripAtPrefix(value)
 				r.Body = ""
 				r.JSONBody = false
+				boolRaw := t == "--data-raw"
+				boolBinary := t == "--data-binary"
+				r.IsDataRaw = &boolRaw
+				r.IsDataBinary = &boolBinary
 			} else {
 				dataParts = append(dataParts, value)
 			}
@@ -845,6 +856,9 @@ func parseOperation(toks []string) (*request.Request, error) {
 
 	if len(r.URLs) == 0 {
 		return nil, errors.New("no URL found in command")
+	}
+	if pendingUserAgent != nil && !hasHeader(r, pendingUserAgent.Key) {
+		setHeader(r, pendingUserAgent.Key, pendingUserAgent.Value)
 	}
 	if pendingReferer != "" && !hasHeader(r, "Referer") {
 		setHeader(r, "Referer", pendingReferer)

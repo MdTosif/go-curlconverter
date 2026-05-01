@@ -8,7 +8,7 @@ It is a focused Go port inspired by the upstream `curlconverter` JavaScript proj
 
 - parses a growing subset of `curl`
 - builds a request model in Go
-- generates JavaScript `fetch()`, Node Axios, Go, and Python code
+- generates a growing set of outputs including JavaScript `fetch()`, JavaScript XHR, JavaScript jQuery, Node fetch, Node Axios, Node HTTP, Node got, Node ky, Node request, Node superagent, Go, Python, JSON, HAR, HTTP, Ansible, CFML, and PHP Requests
 - includes unit tests and fixture-backed parity tests against a local copy of the upstream fixture corpus under `go/test/fixtures`
 
 ## Supported flags
@@ -78,12 +78,40 @@ Current behavior includes:
   Request model used between parsing and code generation.
 - `pkg/generator/javascript`
   JavaScript `fetch()` generator and tests.
+- `pkg/generator/javascriptxhr`
+  JavaScript XHR generator and tests.
+- `pkg/generator/javascriptjquery`
+  JavaScript jQuery generator and tests.
+- `pkg/generator/nodefetch`
+  Node fetch generator and tests.
 - `pkg/generator/nodeaxios`
   Node Axios generator and tests.
+- `pkg/generator/nodehttp`
+  Node HTTP generator and tests.
+- `pkg/generator/nodegot`
+  Node got generator and tests.
+- `pkg/generator/nodeky`
+  Node ky generator and tests.
+- `pkg/generator/noderequest`
+  Node request generator and tests.
+- `pkg/generator/nodesuperagent`
+  Node superagent generator and tests.
 - `pkg/generator/golang`
   Go generator and tests.
 - `pkg/generator/python`
   Python Requests generator and tests.
+- `pkg/generator/json`
+  JSON generator and tests.
+- `pkg/generator/har`
+  HAR generator and tests.
+- `pkg/generator/http`
+  HTTP generator and tests.
+- `pkg/generator/ansible`
+  Ansible generator and tests.
+- `pkg/generator/cfml`
+  CFML generator and tests.
+- `pkg/generator/phprequests`
+  PHP Requests generator and tests.
 - `test/fixtures`
   Local copy of the upstream fixture corpus used by the Go tests.
 - `test/go.mod`

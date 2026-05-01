@@ -29,8 +29,8 @@ func TestPublicAPI(t *testing.T) {
 		t.Fatal("expected parser JSON output")
 	}
 
-	if got := SupportedLanguages(); len(got) != 15 {
-		t.Fatalf("SupportedLanguages() length = %d, want 15", len(got))
+	if got := SupportedLanguages(); len(got) != 21 {
+		t.Fatalf("SupportedLanguages() length = %d, want 21", len(got))
 	}
 
 	code, warnings, err := ToJavaScriptWarn(`curl http://localhost:28139`)
@@ -55,6 +55,18 @@ func TestPublicAPI(t *testing.T) {
 	}
 	if code := GeneratePython(req); code == "" {
 		t.Fatal("expected GeneratePython() output")
+	}
+	if code := GenerateAnsible(req); code == "" {
+		t.Fatal("expected GenerateAnsible() output")
+	}
+	if code := GenerateCFML(req); code == "" {
+		t.Fatal("expected GenerateCFML() output")
+	}
+	if code := GeneratePHPRequests(req); code == "" {
+		t.Fatal("expected GeneratePHPRequests() output")
+	}
+	if code := GenerateRust(req); code == "" {
+		t.Fatal("expected GenerateRust() output")
 	}
 }
 
@@ -88,6 +100,9 @@ func TestPublicAPIArgs(t *testing.T) {
 	if code, err := ToJavaScriptArgs([]string{"curl", "http://localhost:28139"}); err != nil || code == "" {
 		t.Fatalf("ToJavaScriptArgs() = %q, %v", code, err)
 	}
+	if code, err := ToNodeArgs([]string{"curl", "http://localhost:28139"}); err != nil || code == "" {
+		t.Fatalf("ToNodeArgs() = %q, %v", code, err)
+	}
 	if code, err := ToNodeAxiosArgs([]string{"curl", "http://localhost:28139"}); err != nil || code == "" {
 		t.Fatalf("ToNodeAxiosArgs() = %q, %v", code, err)
 	}
@@ -96,6 +111,18 @@ func TestPublicAPIArgs(t *testing.T) {
 	}
 	if code, err := ToPythonArgs([]string{"curl", "http://localhost:28139"}); err != nil || code == "" {
 		t.Fatalf("ToPythonArgs() = %q, %v", code, err)
+	}
+	if code, err := ToAnsibleArgs([]string{"curl", "http://localhost:28139"}); err != nil || code == "" {
+		t.Fatalf("ToAnsibleArgs() = %q, %v", code, err)
+	}
+	if code, err := ToCFMLArgs([]string{"curl", "http://localhost:28139"}); err != nil || code == "" {
+		t.Fatalf("ToCFMLArgs() = %q, %v", code, err)
+	}
+	if code, err := ToPHPRequestsArgs([]string{"curl", "http://localhost:28139"}); err != nil || code == "" {
+		t.Fatalf("ToPHPRequestsArgs() = %q, %v", code, err)
+	}
+	if code, err := ToRustArgs([]string{"curl", "http://localhost:28139"}); err != nil || code == "" {
+		t.Fatalf("ToRustArgs() = %q, %v", code, err)
 	}
 }
 
