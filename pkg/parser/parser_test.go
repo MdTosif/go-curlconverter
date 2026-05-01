@@ -562,6 +562,89 @@ func TestParseAllWarnReportsPipelineAndRedirects(t *testing.T) {
 	}
 }
 
+func TestParseAllWarnExtractsCurlFromSubshellAndBlock(t *testing.T) {
+	t.Parallel()
+
+	reqs, warnings, err := ParseAllWarn(`(echo skip; curl https://inside-subshell.example) && { curl https://inside-block.example; }`)
+	if err != nil {
+		t.Fatalf("ParseAllWarn() error = %v", err)
+	}
+	if len(reqs) != 2 {
+		t.Fatalf("expected 2 curl requests, got %d", len(reqs))
+	}
+	if reqs[0].URLs[0].URL != "https://inside-subshell.example" {
+		t.Fatalf("unexpected first URL %q", reqs[0].URLs[0].URL)
+	}
+	if reqs[1].URLs[0].URL != "https://inside-block.example" {
+		t.Fatalf("unexpected second URL %q", reqs[1].URLs[0].URL)
+	}
+	foundIgnored := false
+	for _, warning := range warnings {
+		if warning[0] == "ignored-command" {
+			foundIgnored = true
+			break
+		}
+	}
+	if !foundIgnored {
+		t.Fatalf("expected ignored-command warning, got %#v", warnings)
+	}
+}
+
+func TestParseAllWarnExtractsCurlAcrossPipelinesAndAndOr(t *testing.T) {
+	t.Parallel()
+
+	reqs, warnings, err := ParseAllWarn(`curl https://first.example | jq . && curl https://second.example || curl https://third.example`)
+	if err != nil {
+		t.Fatalf("ParseAllWarn() error = %v", err)
+	}
+	if len(reqs) != 3 {
+		t.Fatalf("expected 3 curl requests, got %d", len(reqs))
+	}
+	want := []string{
+		"https://first.example",
+		"https://second.example",
+		"https://third.example",
+	}
+	for i, url := range want {
+		if reqs[i].URLs[0].URL != url {
+			t.Fatalf("request %d URL = %q, want %q", i, reqs[i].URLs[0].URL, url)
+		}
+	}
+	foundPipeline := false
+	for _, warning := range warnings {
+		if warning[0] == "pipeline" {
+			foundPipeline = true
+			break
+		}
+	}
+	if !foundPipeline {
+		t.Fatalf("expected pipeline warning, got %#v", warnings)
+	}
+}
+
+func TestParseAllWarnIgnoresCurlInsideCommandSubstitution(t *testing.T) {
+	t.Parallel()
+
+	reqs, warnings, err := ParseAllWarn(`curl "https://example.com/$(curl https://inner.example)" && curl https://outer.example`)
+	if err != nil {
+		t.Fatalf("ParseAllWarn() error = %v", err)
+	}
+	if len(reqs) != 2 {
+		t.Fatalf("expected 2 curl requests, got %d", len(reqs))
+	}
+	if reqs[0].URLs[0].URL != "https://example.com/$(curl https://inner.example)" {
+		t.Fatalf("unexpected first URL %q", reqs[0].URLs[0].URL)
+	}
+	if reqs[1].URLs[0].URL != "https://outer.example" {
+		t.Fatalf("unexpected second URL %q", reqs[1].URLs[0].URL)
+	}
+	for _, warning := range warnings {
+		if warning[0] == "ignored-command" && strings.Contains(warning[1], `"inner.example"`) {
+			t.Fatalf("did not expect nested command substitution to be treated as ignored top-level command: %#v", warnings)
+		}
+	}
+}
+
 func containsAll(s string, subs []string) bool {
 	for _, sub := range subs {
 		if !strings.Contains(s, sub) {
@@ -712,5 +795,214 @@ func TestParseMultipartForms(t *testing.T) {
 	}
 	if req.FormParts[2].Name != "note" || req.FormParts[2].Value != "hello" || req.FormParts[2].IsFile {
 		t.Fatalf("unexpected string form part %#v", req.FormParts[2])
+	}
+}
+
+func TestParseSupportsLongOptionEqualsForms(t *testing.T) {
+	t.Parallel()
+
+	req, err := Parse(`curl --request=POST --url=https://example.com/items --header='Accept: application/json' --data-raw=name=codex --user=alice:secret --referer=https://ref.example`)
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if req.Method != "POST" {
+		t.Fatalf("expected POST, got %q", req.Method)
+	}
+	if len(req.URLs) != 1 || req.URLs[0].URL != "https://example.com/items" {
+		t.Fatalf("unexpected URLs: %#v", req.URLs)
+	}
+	if req.Body != "name=codex" {
+		t.Fatalf("unexpected body %q", req.Body)
+	}
+	if req.BasicAuth != "alice:secret" {
+		t.Fatalf("unexpected basic auth %q", req.BasicAuth)
+	}
+	if got := req.Headers["Accept"]; got != "application/json" {
+		t.Fatalf("unexpected Accept %q", got)
+	}
+	if got := req.Headers["Referer"]; got != "https://ref.example" {
+		t.Fatalf("unexpected Referer %q", got)
+	}
+}
+
+func TestParseLocationAndMaxRedirects(t *testing.T) {
+	t.Parallel()
+
+	req, err := Parse(`curl -L --max-redirs 5 https://example.com`)
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if !req.FollowRedirects {
+		t.Fatal("expected FollowRedirects to be true")
+	}
+	if req.MaxRedirects != "5" {
+		t.Fatalf("expected MaxRedirects 5, got %q", req.MaxRedirects)
+	}
+}
+
+func TestParseLocationTrusted(t *testing.T) {
+	t.Parallel()
+
+	req, err := Parse(`curl --location-trusted https://example.com`)
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if !req.FollowRedirects {
+		t.Fatal("expected FollowRedirects to be true")
+	}
+	if !req.LocationTrusted {
+		t.Fatal("expected LocationTrusted to be true")
+	}
+}
+
+func TestParseTimeoutOptions(t *testing.T) {
+	t.Parallel()
+
+	req, err := Parse(`curl --connect-timeout 10 -m 30 https://example.com`)
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if req.ConnectTimeout != "10" {
+		t.Fatalf("expected ConnectTimeout 10, got %q", req.ConnectTimeout)
+	}
+	if req.MaxTime != "30" {
+		t.Fatalf("expected MaxTime 30, got %q", req.MaxTime)
+	}
+}
+
+func TestParseTLSSSLOptions(t *testing.T) {
+	t.Parallel()
+
+	req, err := Parse(`curl -k --cacert /path/to/ca.crt --cert /path/to/cert.pem --cert-type PEM --key /path/to/key.pem --key-type PEM --pass secret https://example.com`)
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if !req.Insecure {
+		t.Fatal("expected Insecure to be true")
+	}
+	if req.CACert != "/path/to/ca.crt" {
+		t.Fatalf("expected CACert /path/to/ca.crt, got %q", req.CACert)
+	}
+	if req.Cert != "/path/to/cert.pem" {
+		t.Fatalf("expected Cert /path/to/cert.pem, got %q", req.Cert)
+	}
+	if req.CertType != "PEM" {
+		t.Fatalf("expected CertType PEM, got %q", req.CertType)
+	}
+	if req.Key != "/path/to/key.pem" {
+		t.Fatalf("expected Key /path/to/key.pem, got %q", req.Key)
+	}
+	if req.KeyType != "PEM" {
+		t.Fatalf("expected KeyType PEM, got %q", req.KeyType)
+	}
+	if req.Pass != "secret" {
+		t.Fatalf("expected Pass secret, got %q", req.Pass)
+	}
+}
+
+func TestParseCookieJar(t *testing.T) {
+	t.Parallel()
+
+	req, err := Parse(`curl -c cookies.txt https://example.com`)
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if req.CookieJar != "cookies.txt" {
+		t.Fatalf("expected CookieJar cookies.txt, got %q", req.CookieJar)
+	}
+
+	req2, err := Parse(`curl --cookie-jar=cookies.jar https://example.com`)
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if req2.CookieJar != "cookies.jar" {
+		t.Fatalf("expected CookieJar cookies.jar, got %q", req2.CookieJar)
+	}
+}
+
+func TestParseRangeAndContinueAt(t *testing.T) {
+	t.Parallel()
+
+	req, err := Parse(`curl -r 0-100 -C 50 https://example.com/file`)
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if req.Range != "0-100" {
+		t.Fatalf("expected Range 0-100, got %q", req.Range)
+	}
+	if req.ContinueAt != "50" {
+		t.Fatalf("expected ContinueAt 50, got %q", req.ContinueAt)
+	}
+}
+
+func TestParseRetryOptions(t *testing.T) {
+	t.Parallel()
+
+	req, err := Parse(`curl --retry 3 --retry-delay 2 --retry-max-time 60 https://example.com`)
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if req.Retry != "3" {
+		t.Fatalf("expected Retry 3, got %q", req.Retry)
+	}
+	if req.RetryDelay != "2" {
+		t.Fatalf("expected RetryDelay 2, got %q", req.RetryDelay)
+	}
+	if req.RetryMaxTime != "60" {
+		t.Fatalf("expected RetryMaxTime 60, got %q", req.RetryMaxTime)
+	}
+}
+
+func TestParseOutputAndRemoteName(t *testing.T) {
+	t.Parallel()
+
+	req, err := Parse(`curl -o output.html -O --remote-name-all https://example.com`)
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if req.Output != "output.html" {
+		t.Fatalf("expected Output output.html, got %q", req.Output)
+	}
+	if !req.RemoteName {
+		t.Fatal("expected RemoteName to be true")
+	}
+	if !req.RemoteNameAll {
+		t.Fatal("expected RemoteNameAll to be true")
+	}
+}
+
+func TestParseVerboseSilentFail(t *testing.T) {
+	t.Parallel()
+
+	req, err := Parse(`curl -v -s -f https://example.com`)
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if !req.Verbose {
+		t.Fatal("expected Verbose to be true")
+	}
+	if !req.Silent {
+		t.Fatal("expected Silent to be true")
+	}
+	if !req.Fail {
+		t.Fatal("expected Fail to be true")
+	}
+}
+
+func TestParseHTTPVersions(t *testing.T) {
+	t.Parallel()
+
+	req, err := Parse(`curl -0 --http1.1 --http2 https://example.com`)
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if !req.HTTP10 {
+		t.Fatal("expected HTTP10 to be true")
+	}
+	if !req.HTTP11 {
+		t.Fatal("expected HTTP11 to be true")
+	}
+	if !req.HTTP2 {
+		t.Fatal("expected HTTP2 to be true")
 	}
 }

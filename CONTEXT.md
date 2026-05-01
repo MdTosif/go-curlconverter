@@ -56,9 +56,23 @@ GOCACHE=/tmp/go-build-cache go test ./...
 - Added a root Go API in [`curlconverter.go`](/Users/tofiquem/tosif-practice/go-curl/curlconverter/go/curlconverter.go) with parsing and generator entrypoints.
 - Added and tested these output generators:
   - JavaScript `fetch()` in [`pkg/generator/javascript`](/Users/tofiquem/tosif-practice/go-curl/curlconverter/go/pkg/generator/javascript)
+  - JavaScript XHR in [`pkg/generator/javascriptxhr`](/Users/tofiquem/tosif-practice/go-curl/curlconverter/go/pkg/generator/javascriptxhr)
+  - JavaScript jQuery in [`pkg/generator/javascriptjquery`](/Users/tofiquem/tosif-practice/go-curl/curlconverter/go/pkg/generator/javascriptjquery)
+  - Node fetch in [`pkg/generator/nodefetch`](/Users/tofiquem/tosif-practice/go-curl/curlconverter/go/pkg/generator/nodefetch)
+  - Node HTTP in [`pkg/generator/nodehttp`](/Users/tofiquem/tosif-practice/go-curl/curlconverter/go/pkg/generator/nodehttp)
+  - Node got in [`pkg/generator/nodegot`](/Users/tofiquem/tosif-practice/go-curl/curlconverter/go/pkg/generator/nodegot)
+  - Node ky in [`pkg/generator/nodeky`](/Users/tofiquem/tosif-practice/go-curl/curlconverter/go/pkg/generator/nodeky)
+  - Node request in [`pkg/generator/noderequest`](/Users/tofiquem/tosif-practice/go-curl/curlconverter/go/pkg/generator/noderequest)
   - Node Axios in [`pkg/generator/nodeaxios`](/Users/tofiquem/tosif-practice/go-curl/curlconverter/go/pkg/generator/nodeaxios)
+  - Node superagent in [`pkg/generator/nodesuperagent`](/Users/tofiquem/tosif-practice/go-curl/curlconverter/go/pkg/generator/nodesuperagent)
   - Go in [`pkg/generator/golang`](/Users/tofiquem/tosif-practice/go-curl/curlconverter/go/pkg/generator/golang)
   - Python Requests in [`pkg/generator/python`](/Users/tofiquem/tosif-practice/go-curl/curlconverter/go/pkg/generator/python)
+  - JSON in [`pkg/generator/json`](/Users/tofiquem/tosif-practice/go-curl/curlconverter/go/pkg/generator/json)
+  - HAR in [`pkg/generator/har`](/Users/tofiquem/tosif-practice/go-curl/curlconverter/go/pkg/generator/har)
+  - HTTP in [`pkg/generator/http`](/Users/tofiquem/tosif-practice/go-curl/curlconverter/go/pkg/generator/http)
+  - Ansible in [`pkg/generator/ansible`](/Users/tofiquem/tosif-practice/go-curl/curlconverter/go/pkg/generator/ansible)
+  - CFML in [`pkg/generator/cfml`](/Users/tofiquem/tosif-practice/go-curl/curlconverter/go/pkg/generator/cfml)
+  - PHP Requests in [`pkg/generator/phprequests`](/Users/tofiquem/tosif-practice/go-curl/curlconverter/go/pkg/generator/phprequests)
 - Updated the JavaScript `fetch()` generator to better match upstream fixture style for the supported subset:
   - omit `method` for plain `GET`
   - emit `fetch(...);` without the extra promise chain
@@ -89,9 +103,20 @@ The Go code now covers a broader, tested subset of the upstream project. It stil
 Examples still out of scope include:
 
 - full shell language parsing beyond common quoted, escaped, continued, and commented curl commands
-- additional upstream output languages beyond JavaScript `fetch()`, Node Axios, Go, and Python
+- the remaining upstream output languages beyond the currently shipped Go subset
 - warning-code and underline parity with the upstream JS implementation
 - full multi-command / redirect / stdin / query-file / cookie-jar / session semantics across every generator
+
+## Parser direction update
+
+- Decision: move raw shell parsing in Go to `mvdan.cc/sh/v3/syntax` instead of continuing to grow the custom tokenizer/splitter.
+- Reason:
+  - much stronger shell grammar handling and error recovery than ad-hoc token scanning
+  - closer long-term maintainability as shell coverage grows
+  - measured binary-size impact is acceptable for this project (about `+0.28 MB` in a local probe)
+- Scope note:
+  - this change applies to raw command-string parsing (for example `Parse`, `ParseWarn`, `ParseAllWarn`)
+  - argv-slice entrypoints (for example `ParseArgs`, `ParseAllArgs`) stay as-is and do not need shell parsing
 
 ## Future Notes
 
@@ -113,24 +138,29 @@ Examples still out of scope include:
   - in progress: add limited support for multiple chained `curl` commands
   - in progress: add upstream-style `string | string[]` parser entrypoints
   - in progress: port the first warning codes through the Go `Warn` APIs
-  - in progress: port source-underline formatting and parser-originated warnings for the current tokenizer
-  - in progress: port richer shell/tokenizer warning coverage from upstream `src/shell/tokenizer.ts`
-  - next: add more shell-structure warnings such as unsupported syntax nodes, redirect combinations, and command-shape diagnostics
-  - next: port more shell syntax from upstream `src/shell/`
+  - next: integrate `mvdan.cc/sh/v3/syntax` as the raw shell parser backend
+  - next: map mvdan AST nodes to the current token/command extraction flow for `curl` commands
+  - next: port shell warnings to be AST-driven (expansions, substitutions, pipelines, redirects, background, malformed shell constructs)
+  - next: keep source-underlined warning formatting while switching warning origins to the new parser backend
   - next: close remaining curl option-table and precedence gaps
+  - cleanup after mvdan integration (remove unnecessary custom shell parsing code):
+    - remove or greatly simplify `tokenizeWithWarnings` raw-shell scanning branches now replaced by AST parsing
+    - remove duplicate shell command splitting helpers only used by the old scanner (for example shell-boundary splitting and redirect-token stripping that become redundant)
+    - remove old shell warning scanners that duplicate mvdan-backed detection
+    - keep only minimal normalization helpers still required by curl-option parsing
 - Milestone 2: shared request/normalization parity
   - port more of upstream `Request.ts`, `Headers.ts`, `Query.ts`, and `src/curl/*`
   - remove lossy or generator-specific shortcuts in the parser model
 - Milestone 3: existing generator parity
   - replace the Python local-fixture exact-match shortcut with a real parity implementation
-  - tighten JavaScript `fetch()`, Node Axios, and Go output to byte-for-byte fixture parity
+  - tighten the existing generator set to byte-for-byte fixture parity where shortcuts still exist
 - Milestone 4: remaining JavaScript-family generators
-  - port XHR, jQuery, Node fetch, node-http, got, ky, request, and superagent
+  - focus shifts from porting to tightening warning/support parity for the JavaScript-family generators already in tree
 - Milestone 5: remaining upstream generators
-  - port JSON/HTTP/HAR first
-  - then Python HTTP, PHP variants, Ruby variants, Java variants, and the smaller standalone targets
+  - next missing smaller targets include Rust, OCaml, Perl, Swift, and the rest of the non-JS generator surface
+  - larger remaining families include PHP variants, Ruby variants, Java variants, HTTPie/Wget, R variants, and other standalone targets
 - Milestone 6: CLI and public API parity
-  - add upstream-like entrypoints, warning-returning variants, stdin handling, and fuller language coverage
+  - add upstream-like entrypoints, warning-returning variants, stdin handling, and expose more of the already-implemented generators through the CLI
 - Milestone 7: full parity gate
   - keep all copied fixtures under `go/test/fixtures`
   - make full fixture parity under `go test ./...` the acceptance gate

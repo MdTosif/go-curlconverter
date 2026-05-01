@@ -5,17 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"net/url"
+	"os"
 	"path"
-	"strconv"
 	"strings"
 
 	"github.com/mdtosif/go-curlconverter/pkg/request"
 )
-
-func tokenize(s string) []string {
-	toks, _ := tokenizeWithWarnings(s)
-	return toks
-}
 
 func tokenizeWithWarnings(s string) ([]string, Warnings) {
 	var out []string
@@ -160,7 +155,6 @@ func tokenizeWithWarnings(s string) ([]string, Warnings) {
 	if tokenStarted {
 		out = append(out, cur.String())
 	}
-	warnings = append(warnings, scanShellWarnings(s)...)
 	if inSingle && singleStart >= 0 {
 		warnings = append(warnings, Warning{
 			"unterminated-single-quote",
@@ -189,9 +183,26 @@ func ParseAll(cmd string) ([]*request.Request, error) {
 
 func ParseAllWarn(cmd string) ([]*request.Request, Warnings, error) {
 	trimmed := strings.TrimSpace(cmd)
-	toks, warnings := tokenizeWithWarnings(trimmed)
-	reqs, warnings, err := parseRawTokenArgs(toks, warnings)
-	return reqs, warnings, err
+	_, tokenizerWarnings := tokenizeWithWarnings(trimmed)
+	baseWarnings := scanImproperLineContinuationWarnings(trimmed)
+	if astWarnings, err := scanShellWarningsAST(trimmed); err == nil {
+		baseWarnings = append(baseWarnings, astWarnings...)
+	}
+	baseWarnings = append(baseWarnings, tokenizerWarnings...)
+	if len(trimmed) == 0 {
+		return nil, baseWarnings, errors.New("empty command")
+	}
+
+	commands, astErr := extractRawCommands(trimmed)
+	if astErr == nil {
+		reqs, warnings, err := parseExtractedCommands(commands, baseWarnings)
+		return reqs, warnings, err
+	}
+
+	// Fallback for malformed shell input: keep existing quote/backslash diagnostics.
+	toks, _ := tokenizeWithWarnings(trimmed)
+	reqs, err := parseTokenArgs(toks)
+	return reqs, baseWarnings, err
 }
 
 func ParseAllArgs(args []string) ([]*request.Request, error) {
@@ -203,77 +214,6 @@ func ParseAllArgsWarn(args []string) ([]*request.Request, Warnings, error) {
 	toks := append([]string(nil), args...)
 	reqs, err := parseTokenArgs(toks)
 	return reqs, nil, err
-}
-
-func parseRawTokenArgs(toks []string, warnings Warnings) ([]*request.Request, Warnings, error) {
-	if len(toks) == 0 {
-		return nil, warnings, errors.New("empty command")
-	}
-
-	commands := splitShellCommands(toks)
-	curlCommands := make([][]string, 0, len(commands))
-	for _, command := range commands {
-		if len(command) == 0 {
-			continue
-		}
-		if strings.TrimSpace(command[0]) == "curl" {
-			curlCommands = append(curlCommands, command)
-			continue
-		}
-		warnings = append(warnings, Warning{
-			"ignored-command",
-			"ignoring non-curl command starting with " + strconv.Quote(clip(command[0])),
-		})
-	}
-	if len(curlCommands) == 0 {
-		return nil, warnings, errors.New("command must start with 'curl'")
-	}
-
-	reqs := make([]*request.Request, 0, len(curlCommands))
-	for _, command := range curlCommands {
-		cleaned := stripRedirectTokens(command)
-		parsed, err := parseTokenArgs(cleaned)
-		if err != nil {
-			return nil, warnings, err
-		}
-		reqs = append(reqs, parsed...)
-	}
-	return reqs, warnings, nil
-}
-
-func splitShellCommands(toks []string) [][]string {
-	if len(toks) == 0 {
-		return nil
-	}
-
-	var commands [][]string
-	current := make([]string, 0, len(toks))
-	for _, tok := range toks {
-		if len(current) > 0 && isShellCommandBoundary(tok) {
-			commands = append(commands, current)
-			current = make([]string, 0, len(toks))
-			continue
-		}
-		current = append(current, tok)
-	}
-	if len(current) > 0 {
-		commands = append(commands, current)
-	}
-	return commands
-}
-
-func stripRedirectTokens(toks []string) []string {
-	cleaned := make([]string, 0, len(toks))
-	for i := 0; i < len(toks); i++ {
-		if isRedirectOperator(toks[i]) {
-			if i+1 < len(toks) {
-				i++
-			}
-			continue
-		}
-		cleaned = append(cleaned, toks[i])
-	}
-	return cleaned
 }
 
 func parseTokenArgs(toks []string) ([]*request.Request, error) {
@@ -345,24 +285,6 @@ func isCommandSeparator(tok string) bool {
 	}
 }
 
-func isShellCommandBoundary(tok string) bool {
-	switch tok {
-	case ";", "&&", "||", "|", "&":
-		return true
-	default:
-		return false
-	}
-}
-
-func isRedirectOperator(tok string) bool {
-	switch tok {
-	case "<", ">", "<<", ">>":
-		return true
-	default:
-		return false
-	}
-}
-
 func splitOperations(args []string) [][]string {
 	if len(args) == 0 {
 		return nil
@@ -402,7 +324,22 @@ func operationHasURL(args []string) bool {
 			"-u", "--user",
 			"-d", "--data", "--data-raw", "--data-binary", "--data-ascii",
 			"-F", "--form", "--form-string",
-			"--json":
+			"--json",
+			"-c", "--cookie-jar",
+			"-E", "--cert",
+			"--cert-type",
+			"--key",
+			"--key-type",
+			"--pass",
+			"--cacert", "--connect-timeout", "--max-time", "--max-redirs",
+			"--data-urlencode", "-r", "--range",
+			"-C", "--continue-at",
+			"--retry", "--retry-delay", "--retry-max-time",
+			"-o", "--output",
+			"--noproxy", "--preproxy",
+			"--socks4", "--socks4a", "--socks5", "--socks5-hostname",
+			"--capath", "--crlfile", "--pinnedpubkey",
+			"--speed-limit", "--speed-time":
 			i++
 		case "--url":
 			if i+1 < len(args) && args[i+1] != "" {
@@ -445,10 +382,31 @@ func parseOperation(toks []string) (*request.Request, error) {
 	appendQuery := false
 	explicitMethod := false
 	pendingReferer := ""
+	var pendingUserAgent *request.Header
 	lastDataFlag := ""
 
 	for i := 0; i < len(toks); i++ {
 		t := toks[i]
+		if name, value, ok := strings.Cut(t, "="); ok && strings.HasPrefix(name, "--") {
+			switch name {
+			case "--request", "--upload-file", "--proxy", "--user-agent", "--referer",
+				"--oauth2-bearer", "--proxy-user", "--url", "--header", "--cookie",
+				"--user", "--data", "--data-raw", "--data-binary", "--data-ascii",
+				"--form", "--form-string", "--json",
+				"--cookie-jar", "--cert", "--cert-type", "--key", "--key-type", "--pass",
+				"--cacert", "--connect-timeout", "--max-time", "--max-redirs",
+				"--data-urlencode", "--range", "--continue-at",
+				"--retry", "--retry-delay", "--retry-max-time", "--output",
+				"--noproxy", "--preproxy",
+				"--socks4", "--socks4a", "--socks5", "--socks5-hostname",
+				"--capath", "--crlfile", "--pinnedpubkey",
+				"--speed-limit", "--speed-time":
+				if value != "" {
+					t = name
+					toks = append(toks[:i+1], append([]string{value}, toks[i+1:]...)...)
+				}
+			}
+		}
 		if strings.HasPrefix(t, "-X") && len(t) > 2 && t != "-X" {
 			r.Method = t[2:]
 			explicitMethod = true
@@ -494,7 +452,7 @@ func parseOperation(toks []string) (*request.Request, error) {
 			if t == "--user-agent" {
 				headerName = "user-agent"
 			}
-			setHeader(r, headerName, toks[i+1])
+			pendingUserAgent = &request.Header{Key: headerName, Value: toks[i+1]}
 			i++
 			continue
 		case "-e", "--referer":
@@ -513,6 +471,279 @@ func parseOperation(toks []string) (*request.Request, error) {
 			continue
 		case "--digest":
 			r.DigestAuth = true
+			continue
+		case "-L", "--location":
+			r.FollowRedirects = true
+			continue
+		case "--max-redirs":
+			if i+1 >= len(toks) {
+				return nil, errors.New("missing argument for --max-redirs")
+			}
+			r.MaxRedirects = toks[i+1]
+			i++
+			continue
+		case "--location-trusted":
+			r.FollowRedirects = true
+			r.LocationTrusted = true
+			continue
+		case "--connect-timeout":
+			if i+1 >= len(toks) {
+				return nil, errors.New("missing argument for --connect-timeout")
+			}
+			r.ConnectTimeout = toks[i+1]
+			i++
+			continue
+		case "-m", "--max-time":
+			if i+1 >= len(toks) {
+				return nil, errors.New("missing argument for -m/--max-time")
+			}
+			r.MaxTime = toks[i+1]
+			i++
+			continue
+		case "-k", "--insecure":
+			r.Insecure = true
+			continue
+		case "--cacert":
+			if i+1 >= len(toks) {
+				return nil, errors.New("missing argument for --cacert")
+			}
+			r.CACert = toks[i+1]
+			i++
+			continue
+		case "-E", "--cert":
+			if i+1 >= len(toks) {
+				return nil, errors.New("missing argument for -E/--cert")
+			}
+			r.Cert = toks[i+1]
+			i++
+			continue
+		case "--cert-type":
+			if i+1 >= len(toks) {
+				return nil, errors.New("missing argument for --cert-type")
+			}
+			r.CertType = toks[i+1]
+			i++
+			continue
+		case "--key":
+			if i+1 >= len(toks) {
+				return nil, errors.New("missing argument for --key")
+			}
+			r.Key = toks[i+1]
+			i++
+			continue
+		case "--key-type":
+			if i+1 >= len(toks) {
+				return nil, errors.New("missing argument for --key-type")
+			}
+			r.KeyType = toks[i+1]
+			i++
+			continue
+		case "--pass":
+			if i+1 >= len(toks) {
+				return nil, errors.New("missing argument for --pass")
+			}
+			r.Pass = toks[i+1]
+			i++
+			continue
+		case "-c", "--cookie-jar":
+			if i+1 >= len(toks) {
+				return nil, errors.New("missing argument for -c/--cookie-jar")
+			}
+			r.CookieJar = toks[i+1]
+			i++
+			continue
+		case "--data-urlencode":
+			if i+1 >= len(toks) {
+				return nil, errors.New("missing argument for --data-urlencode")
+			}
+			r.HasBody = true
+			value := toks[i+1]
+			lastDataFlag = "--data-urlencode"
+			dataParts = append(dataParts, urlEncodeData(value))
+			if !explicitMethod && r.Method == "GET" {
+				r.Method = "POST"
+			}
+			i++
+			continue
+		case "-r", "--range":
+			if i+1 >= len(toks) {
+				return nil, errors.New("missing argument for -r/--range")
+			}
+			r.Range = toks[i+1]
+			i++
+			continue
+		case "-C", "--continue-at":
+			if i+1 >= len(toks) {
+				return nil, errors.New("missing argument for -C/--continue-at")
+			}
+			r.ContinueAt = toks[i+1]
+			i++
+			continue
+		case "--retry":
+			if i+1 >= len(toks) {
+				return nil, errors.New("missing argument for --retry")
+			}
+			r.Retry = toks[i+1]
+			i++
+			continue
+		case "--retry-delay":
+			if i+1 >= len(toks) {
+				return nil, errors.New("missing argument for --retry-delay")
+			}
+			r.RetryDelay = toks[i+1]
+			i++
+			continue
+		case "--retry-max-time":
+			if i+1 >= len(toks) {
+				return nil, errors.New("missing argument for --retry-max-time")
+			}
+			r.RetryMaxTime = toks[i+1]
+			i++
+			continue
+		case "-o", "--output":
+			if i+1 >= len(toks) {
+				return nil, errors.New("missing argument for -o/--output")
+			}
+			r.Output = toks[i+1]
+			i++
+			continue
+		case "-O", "--remote-name":
+			r.RemoteName = true
+			continue
+		case "--remote-name-all":
+			r.RemoteNameAll = true
+			continue
+		case "-v", "--verbose":
+			r.Verbose = true
+			continue
+		case "-s", "--silent":
+			r.Silent = true
+			continue
+		case "-f", "--fail":
+			r.Fail = true
+			continue
+		case "-0", "--http1.0":
+			r.HTTP10 = true
+			continue
+		case "--http1.1":
+			r.HTTP11 = true
+			continue
+		case "--http2":
+			r.HTTP2 = true
+			continue
+		case "--http3":
+			r.HTTP3 = true
+			continue
+		case "--http2-prior-knowledge":
+			r.HTTP2 = true
+			r.HTTP2PriorKnowledge = true
+			continue
+		case "--post301":
+			r.Post301 = true
+			continue
+		case "--post302":
+			r.Post302 = true
+			continue
+		case "--post303":
+			r.Post303 = true
+			continue
+		case "--trace-ascii":
+			if i+1 >= len(toks) {
+				return nil, errors.New("missing argument for --trace-ascii")
+			}
+			i++
+			continue
+		case "-4", "--ipv4":
+			r.IPv4 = true
+			continue
+		case "-6", "--ipv6":
+			r.IPv6 = true
+			continue
+		case "-g", "--globoff":
+			r.Globoff = true
+			continue
+		case "-i", "--include":
+			r.Include = true
+			continue
+		case "--proxytunnel":
+			r.ProxyTunnel = true
+			continue
+		case "--noproxy":
+			if i+1 >= len(toks) {
+				return nil, errors.New("missing argument for --noproxy")
+			}
+			r.NoProxy = toks[i+1]
+			i++
+			continue
+		case "--preproxy":
+			if i+1 >= len(toks) {
+				return nil, errors.New("missing argument for --preproxy")
+			}
+			r.PreProxy = toks[i+1]
+			i++
+			continue
+		case "--socks4":
+			if i+1 >= len(toks) {
+				return nil, errors.New("missing argument for --socks4")
+			}
+			r.SOCKS4 = toks[i+1]
+			i++
+			continue
+		case "--socks4a":
+			if i+1 >= len(toks) {
+				return nil, errors.New("missing argument for --socks4a")
+			}
+			r.SOCKS4a = toks[i+1]
+			i++
+			continue
+		case "--socks5":
+			if i+1 >= len(toks) {
+				return nil, errors.New("missing argument for --socks5")
+			}
+			r.SOCKS5 = toks[i+1]
+			i++
+			continue
+		case "--socks5-hostname":
+			if i+1 >= len(toks) {
+				return nil, errors.New("missing argument for --socks5-hostname")
+			}
+			r.SOCKS5Hostname = toks[i+1]
+			i++
+			continue
+		case "--capath":
+			if i+1 >= len(toks) {
+				return nil, errors.New("missing argument for --capath")
+			}
+			r.CAPath = toks[i+1]
+			i++
+			continue
+		case "--crlfile":
+			if i+1 >= len(toks) {
+				return nil, errors.New("missing argument for --crlfile")
+			}
+			r.CRLFile = toks[i+1]
+			i++
+			continue
+		case "--pinnedpubkey":
+			if i+1 >= len(toks) {
+				return nil, errors.New("missing argument for --pinnedpubkey")
+			}
+			r.PinnedPubKey = toks[i+1]
+			i++
+			continue
+		case "--speed-limit":
+			if i+1 >= len(toks) {
+				return nil, errors.New("missing argument for --speed-limit")
+			}
+			r.SpeedLimit = toks[i+1]
+			i++
+			continue
+		case "--speed-time":
+			if i+1 >= len(toks) {
+				return nil, errors.New("missing argument for --speed-time")
+			}
+			r.SpeedTime = toks[i+1]
+			i++
 			continue
 		case "-U", "--proxy-user":
 			if i+1 >= len(toks) {
@@ -544,7 +775,7 @@ func parseOperation(toks []string) (*request.Request, error) {
 				v := strings.TrimSpace(h[idx+1:])
 				setHeader(r, k, v)
 			} else {
-				setHeader(r, h, "")
+				setHeader(r, strings.TrimSuffix(h, ";"), "")
 			}
 			i++
 			continue
@@ -578,6 +809,10 @@ func parseOperation(toks []string) (*request.Request, error) {
 				r.BodyFile = stripAtPrefix(value)
 				r.Body = ""
 				r.JSONBody = false
+				boolRaw := t == "--data-raw"
+				boolBinary := t == "--data-binary"
+				r.IsDataRaw = &boolRaw
+				r.IsDataBinary = &boolBinary
 			} else {
 				dataParts = append(dataParts, value)
 			}
@@ -621,6 +856,9 @@ func parseOperation(toks []string) (*request.Request, error) {
 
 	if len(r.URLs) == 0 {
 		return nil, errors.New("no URL found in command")
+	}
+	if pendingUserAgent != nil && !hasHeader(r, pendingUserAgent.Key) {
+		setHeader(r, pendingUserAgent.Key, pendingUserAgent.Value)
 	}
 	if pendingReferer != "" && !hasHeader(r, "Referer") {
 		setHeader(r, "Referer", pendingReferer)
@@ -930,4 +1168,22 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func urlEncodeData(value string) string {
+	if strings.HasPrefix(value, "@") {
+		content, err := os.ReadFile(strings.TrimPrefix(value, "@"))
+		if err != nil {
+			return url.QueryEscape(value)
+		}
+		return url.QueryEscape(string(content))
+	}
+	if strings.HasPrefix(value, "=") {
+		return url.QueryEscape(strings.TrimPrefix(value, "="))
+	}
+	if strings.Contains(value, "=") {
+		parts := strings.SplitN(value, "=", 2)
+		return parts[0] + "=" + url.QueryEscape(parts[1])
+	}
+	return url.QueryEscape(value)
 }
