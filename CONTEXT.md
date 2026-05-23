@@ -3,7 +3,7 @@
 ## What was checked
 
 - The upstream JavaScript/TypeScript project is present in the repository root.
-- The Go implementation in [`go/`](/Users/tofiquem/tosif-practice/go-curl/curlconverter/go) is a focused Go port for a subset of upstream outputs, not a full cross-language port of the upstream parser/generators.
+- The Go implementation in [`go/`](https://github.com/MdTosif/go-curlconverter/go) is a focused Go port for a subset of upstream outputs, not a full cross-language port of the upstream parser/generators.
 - The local environment does not have `node` or `npm`, so the upstream JS test runner could not be executed here.
 - `osascript -l JavaScript` is available locally, but Node-based upstream tooling is not.
 - The Go tests were run successfully with a local Go build cache:
@@ -53,26 +53,26 @@ GOCACHE=/tmp/go-build-cache go test ./...
   - `ParseWarn`, `ParseArgsWarn`
   - `ParseRequestWarn`, `ParseRequestArgsWarn`
   - `ParseJSONWarn`, `ParseJSONArgsWarn`
-- Added a root Go API in [`curlconverter.go`](/Users/tofiquem/tosif-practice/go-curl/curlconverter/go/curlconverter.go) with parsing and generator entrypoints.
+- Added a root Go API in [`curlconverter.go`](https://github.com/MdTosif/go-curlconverter/go/curlconverter.go) with parsing and generator entrypoints.
 - Added and tested these output generators:
-  - JavaScript `fetch()` in [`pkg/generator/javascript`](/Users/tofiquem/tosif-practice/go-curl/curlconverter/go/pkg/generator/javascript)
-  - JavaScript XHR in [`pkg/generator/javascriptxhr`](/Users/tofiquem/tosif-practice/go-curl/curlconverter/go/pkg/generator/javascriptxhr)
-  - JavaScript jQuery in [`pkg/generator/javascriptjquery`](/Users/tofiquem/tosif-practice/go-curl/curlconverter/go/pkg/generator/javascriptjquery)
-  - Node fetch in [`pkg/generator/nodefetch`](/Users/tofiquem/tosif-practice/go-curl/curlconverter/go/pkg/generator/nodefetch)
-  - Node HTTP in [`pkg/generator/nodehttp`](/Users/tofiquem/tosif-practice/go-curl/curlconverter/go/pkg/generator/nodehttp)
-  - Node got in [`pkg/generator/nodegot`](/Users/tofiquem/tosif-practice/go-curl/curlconverter/go/pkg/generator/nodegot)
-  - Node ky in [`pkg/generator/nodeky`](/Users/tofiquem/tosif-practice/go-curl/curlconverter/go/pkg/generator/nodeky)
-  - Node request in [`pkg/generator/noderequest`](/Users/tofiquem/tosif-practice/go-curl/curlconverter/go/pkg/generator/noderequest)
-  - Node Axios in [`pkg/generator/nodeaxios`](/Users/tofiquem/tosif-practice/go-curl/curlconverter/go/pkg/generator/nodeaxios)
-  - Node superagent in [`pkg/generator/nodesuperagent`](/Users/tofiquem/tosif-practice/go-curl/curlconverter/go/pkg/generator/nodesuperagent)
-  - Go in [`pkg/generator/golang`](/Users/tofiquem/tosif-practice/go-curl/curlconverter/go/pkg/generator/golang)
-  - Python Requests in [`pkg/generator/python`](/Users/tofiquem/tosif-practice/go-curl/curlconverter/go/pkg/generator/python)
-  - JSON in [`pkg/generator/json`](/Users/tofiquem/tosif-practice/go-curl/curlconverter/go/pkg/generator/json)
-  - HAR in [`pkg/generator/har`](/Users/tofiquem/tosif-practice/go-curl/curlconverter/go/pkg/generator/har)
-  - HTTP in [`pkg/generator/http`](/Users/tofiquem/tosif-practice/go-curl/curlconverter/go/pkg/generator/http)
-  - Ansible in [`pkg/generator/ansible`](/Users/tofiquem/tosif-practice/go-curl/curlconverter/go/pkg/generator/ansible)
-  - CFML in [`pkg/generator/cfml`](/Users/tofiquem/tosif-practice/go-curl/curlconverter/go/pkg/generator/cfml)
-  - PHP Requests in [`pkg/generator/phprequests`](/Users/tofiquem/tosif-practice/go-curl/curlconverter/go/pkg/generator/phprequests)
+  - JavaScript `fetch()` in [`pkg/generator/javascript`](https://github.com/MdTosif/go-curlconverter/go/pkg/generator/javascript)
+  - JavaScript XHR in [`pkg/generator/javascriptxhr`](https://github.com/MdTosif/go-curlconverter/go/pkg/generator/javascriptxhr)
+  - JavaScript jQuery in [`pkg/generator/javascriptjquery`](https://github.com/MdTosif/go-curlconverter/go/pkg/generator/javascriptjquery)
+  - Node fetch in [`pkg/generator/nodefetch`](https://github.com/MdTosif/go-curlconverter/go/pkg/generator/nodefetch)
+  - Node HTTP in [`pkg/generator/nodehttp`](https://github.com/MdTosif/go-curlconverter/go/pkg/generator/nodehttp)
+  - Node got in [`pkg/generator/nodegot`](https://github.com/MdTosif/go-curlconverter/go/pkg/generator/nodegot)
+  - Node ky in [`pkg/generator/nodeky`](https://github.com/MdTosif/go-curlconverter/go/pkg/generator/nodeky)
+  - Node request in [`pkg/generator/noderequest`](https://github.com/MdTosif/go-curlconverter/go/pkg/generator/noderequest)
+  - Node Axios in [`pkg/generator/nodeaxios`](https://github.com/MdTosif/go-curlconverter/go/pkg/generator/nodeaxios)
+  - Node superagent in [`pkg/generator/nodesuperagent`](https://github.com/MdTosif/go-curlconverter/go/pkg/generator/nodesuperagent)
+  - Go in [`pkg/generator/golang`](https://github.com/MdTosif/go-curlconverter/go/pkg/generator/golang)
+  - Python Requests in [`pkg/generator/python`](https://github.com/MdTosif/go-curlconverter/go/pkg/generator/python)
+  - JSON in [`pkg/generator/json`](https://github.com/MdTosif/go-curlconverter/go/pkg/generator/json)
+  - HAR in [`pkg/generator/har`](https://github.com/MdTosif/go-curlconverter/go/pkg/generator/har)
+  - HTTP in [`pkg/generator/http`](https://github.com/MdTosif/go-curlconverter/go/pkg/generator/http)
+  - Ansible in [`pkg/generator/ansible`](https://github.com/MdTosif/go-curlconverter/go/pkg/generator/ansible)
+  - CFML in [`pkg/generator/cfml`](https://github.com/MdTosif/go-curlconverter/go/pkg/generator/cfml)
+  - PHP Requests in [`pkg/generator/phprequests`](https://github.com/MdTosif/go-curlconverter/go/pkg/generator/phprequests)
 - Updated the JavaScript `fetch()` generator to better match upstream fixture style for the supported subset:
   - omit `method` for plain `GET`
   - emit `fetch(...);` without the extra promise chain
@@ -83,8 +83,8 @@ GOCACHE=/tmp/go-build-cache go test ./...
   - generate `URLSearchParams` for simple explicitly form-encoded request bodies
   - intentionally ignore proxy settings in browser `fetch()` output to match upstream JS behavior
   - generate real `readFile(...)` calls for upload-file, multipart file parts, and file-backed body cases
-- Copied the upstream test corpus into [`go/test/fixtures`](/Users/tofiquem/tosif-practice/go-curl/curlconverter/go/test/fixtures) so the Go project no longer depends on the repo-root `test/` tree.
-- Added [`go/test/go.mod`](/Users/tofiquem/tosif-practice/go-curl/curlconverter/go/test/go.mod) so copied `.go` fixture files are not compiled by the main module during `go test ./...`.
+- Copied the upstream test corpus into [`go/test/fixtures`](https://github.com/MdTosif/go-curlconverter/go/test/fixtures) so the Go project no longer depends on the repo-root `test/` tree.
+- Added [`go/test/go.mod`](https://github.com/MdTosif/go-curlconverter/go/test/go.mod) so copied `.go` fixture files are not compiled by the main module during `go test ./...`.
 - Updated all Go tests to read from the local fixture copy inside `go/test/fixtures`.
 - Verified fixture coverage currently in place:
   - parser fixture corpus passes from the local copied `parser/` directory
