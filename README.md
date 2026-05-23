@@ -4,6 +4,8 @@ This directory contains a Go implementation of curl request conversion with Go-n
 
 It is a focused Go port inspired by the upstream `curlconverter` JavaScript project in the repository root. The Go code targets a growing subset of upstream outputs, with unit tests and fixture-backed parity checks for the supported generators.
 
+For a short write-up on the workflow behind the port, including how Codex and the existing test suite supported TDD in the Go code, see [docs/porting-curlconverter-to-go-with-codex.md](docs/porting-curlconverter-to-go-with-codex.md).
+
 ## What it does
 
 - parses a growing subset of `curl`
